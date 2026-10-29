@@ -199,7 +199,9 @@ try {
 if (!S) { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); } }
 // Migrate older saved state: never persist an API key with app data.
 const hadStoredKey = Object.prototype.hasOwnProperty.call(S, 'apiKey');
+const hadLegacyModel = typeof S.model === 'string' && S.model.startsWith('claude-');
 delete S.apiKey;
+if (hadLegacyModel) S.model = DEF.model;
 
 const flush = () => {
   if (!remote) return; clearTimeout(tmr); tmr = null;
@@ -435,7 +437,7 @@ $('share').onchange = () => { S.share = $('share').checked; save(); };
 renderChat();
 $('st').innerHTML = STAGES.map((s, i) => '<option value="' + i + '">Starts in ' + s + '</option>').join('');
 initForm(); render(true);
-if ((remote && !hadRemote) || hadStoredKey) save();
+if ((remote && !hadRemote) || hadStoredKey || hadLegacyModel) save();
 setInterval(() => render(false), 60000);
 })();
 </script>
