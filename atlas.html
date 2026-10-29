@@ -209,7 +209,7 @@ try {
   }
 } catch (e) {}
 if (!S) { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); } }
-delete S.apiKey; S.dailyReviews = S.dailyReviews || []; S.dailyDraft = S.dailyDraft || null;
+const hadLegacyKey = !!S.apiKey; delete S.apiKey; S.dailyReviews = S.dailyReviews || []; S.dailyDraft = S.dailyDraft || null;
 const flush = () => {
   if (!remote) return; clearTimeout(tmr); tmr = null;
   fetch('/api/data', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(S), keepalive: true}).catch(() => {});
@@ -218,6 +218,7 @@ const save = () => {
   try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {}
   if (remote) { clearTimeout(tmr); tmr = setTimeout(flush, 250); }
 };
+if (hadLegacyKey) save();
 window.addEventListener('pagehide', () => { if (tmr) flush(); });
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -339,7 +340,7 @@ $('dailyFlow').addEventListener('click', async e => {
     try { let raw = await callApi(BASE, [{role:'user',content:prompt}], 1400); raw = raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''); const review = JSON.parse(raw); d.review = review; save(); renderDaily(); }
     catch(err) { $('dailyFlow').innerHTML = '<div class="msg err">Could not analyse the reflection: ' + esc(err.message) + '</div><button id="dailyAnalyse" class="main">Try again</button>'; }
   }
-  if (e.target.id === 'dailyEdit') { const d = dailyEnsure(); d.review = null; d.step = DAILY_QS.length; save(); renderDaily(); }
+  if (e.target.id === 'dailyEdit') { const d = dailyEnsure(); d.review = null; d.step = Math.max(0, DAILY_QS.length - 1); save(); renderDaily(); }
   if (e.target.id === 'dailyApprove') {
     const d = dailyEnsure(), review = d.review || {}, selected = [...$('dailyFlow').querySelectorAll('[data-daily-approve]:checked')].map(el => Number(el.dataset.dailyApprove));
     selected.forEach(i => { const t = (review.tasks || [])[i]; if (!t || !t.title) return; S.tasks.push({id:Date.now()+i+Math.floor(Math.random()*1000),t:t.title,label:t.label || 'From daily review',stage:Math.max(0,STAGES.indexOf(t.stage)),today:false,done:false}); addLog('New task approved: ' + t.title,'Daily review'); });
