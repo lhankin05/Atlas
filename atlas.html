@@ -66,6 +66,15 @@ button.ghost{background:none;color:var(--mut)}
 .digest ul{margin:6px 0 0;padding-left:18px}
 label.qq{display:block;margin:14px 0 6px;font-weight:500}
 .ok{color:var(--ok);font-size:13px}
+.chat{display:grid;gap:10px;max-height:480px;overflow:auto;margin-bottom:12px}
+.msg{border-radius:16px;padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:88%}
+.msg.user{background:var(--accbg);justify-self:end}
+.msg.assistant{background:var(--inset);justify-self:start}
+.msg.err{background:#3d2626;color:#e6a5a5;justify-self:start}
+.set{display:grid;gap:10px;margin-bottom:16px}
+.set .row>*{flex:1;min-width:180px}
+.chk{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:14px}
+.chk input{width:18px;height:18px;accent-color:var(--acc);padding:0}
 @media(max-width:860px){.app{grid-template-columns:1fr}.side{display:flex;overflow:auto}.r1{grid-template-columns:1fr}}
 </style>
 </head>
@@ -83,6 +92,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
     <button class="nav on" data-page="home">Home</button>
     <button class="nav" data-page="tasks">All tasks</button>
     <button class="nav" data-page="week">Weekly reflection</button>
+    <button class="nav" data-page="chat">Chat with Atlas</button>
   </nav>
 
   <main>
@@ -131,6 +141,24 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
       </section>
     </div>
 
+    <div class="page" id="p-chat" hidden>
+      <section class="card" aria-labelledby="h-chat">
+        <div class="row"><h2 id="h-chat">Chat with Atlas</h2><span class="sp"></span><button class="ghost" id="clearChat">Clear chat</button></div>
+        <p class="hint">Ask Atlas where you are, what to do next, or to help you get back on track.</p>
+        <div class="set">
+          <div class="row">
+            <input id="apiKey" type="password" placeholder="Anthropic API key" aria-label="Anthropic API key" autocomplete="off">
+            <input id="model" placeholder="Model" aria-label="Model">
+          </div>
+          <label class="chk"><input type="checkbox" id="share"> Share my tasks and today's log with Atlas</label>
+          <span class="hint" style="margin:0">Your key stays in this browser. Chat messages, and your tasks if sharing is on, are sent to the Claude API.</span>
+        </div>
+        <div class="chat" id="chat" aria-live="polite"></div>
+        <textarea id="chatIn" placeholder="Message Atlas. Enter sends, Shift+Enter adds a line." aria-label="Message"></textarea>
+        <div class="row end"><span id="chatSt" class="hint" style="margin:0"></span><button class="main" id="send">Send</button></div>
+      </section>
+    </div>
+
     <div class="page" id="p-week" hidden>
       <section class="card">
         <div class="row"><h2>Weekly reflection</h2><span class="sp"></span><span id="due"></span></div>
@@ -146,7 +174,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
 <script>
 const K = 'atlas:v2';
 const STAGES = ['Brief', 'Design', 'Build', 'Test', 'Review', 'Push'];
-const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0};
+const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'claude-sonnet-5-5'};
 const SLOTS = [
   {id: 'am', h: 9, m: 0, q: 'Morning check-in. What are you tackling today, and which stage is it in?'},
   {id: 'mid', h: 12, m: 30, q: 'Midday check-in. What got done this morning, and are you still on plan?'},
@@ -251,7 +279,7 @@ function render(force) {
   renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force);
 }
 function show(page) {
-  ['home', 'tasks', 'week'].forEach(p => { $('p-' + p).hidden = p !== page; });
+  ['home', 'tasks', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
   document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.page === page));
 }
 
@@ -288,6 +316,53 @@ $('reflSave').onclick = () => {
 function initForm() {
   $('qs').innerHTML = QS.map((q, i) => '<label class="qq" for="q' + i + '">' + esc(q) + '</label><textarea id="q' + i + '"></textarea>').join('');
 }
+const KEYK = 'atlas:key';
+const getKey = () => { try { return localStorage.getItem(KEYK) || ''; } catch (e) { return ''; } };
+function ctx() {
+  const o = S.tasks.filter(t => !t.done);
+  const fmt = t => '- ' + t.t + ' [' + (t.label || 'no label') + ', ' + STAGES[t.stage] + (t.today ? ', today' : '') + ']';
+  const dk = dayKey(new Date()), lg = S.log.filter(e => dayKey(new Date(e.ts)) === dk).slice(-15);
+  return '\n\nCurrent state of the user\'s work:\nWeekly focus: ' + (S.focus || 'not set') + '\nOpen tasks (' + o.length + '):\n' + (o.map(fmt).join('\n') || 'none') +
+    '\nToday\'s log:\n' + (lg.map(e => hm(e.ts) + ' ' + e.text).join('\n') || 'nothing yet');
+}
+function renderChat() {
+  $('chat').innerHTML = S.chat.length ? S.chat.map(m => '<div class="msg ' + (m.err ? 'err' : m.role) + '">' + esc(m.content) + '</div>').join('')
+    : '<div class="empty">No messages yet. Try: What should I work on next?</div>';
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+let busy = false;
+async function send() {
+  const v = $('chatIn').value.trim(), key = $('apiKey').value.trim();
+  if (busy) return;
+  if (!key) { $('chatSt').textContent = 'Add your API key first.'; $('apiKey').focus(); return; }
+  if (!v) { $('chatIn').focus(); return; }
+  try { localStorage.setItem(KEYK, key); } catch (e) {}
+  S.model = $('model').value.trim() || DEF.model; S.share = $('share').checked;
+  S.chat = S.chat.filter(m => !m.err); S.chat.push({role: 'user', content: v}); $('chatIn').value = '';
+  busy = true; $('send').disabled = true; $('chatSt').textContent = 'Atlas is thinking...'; save(); renderChat();
+  const system = 'You are Atlas, a chief of staff for a developer building VR training experiences in Unity. Every task moves through Brief, Design, Build, Test, Review and Push. Keep the user on track and help when they get pulled between tasks. Be firm but friendly, concise and practical. Ask a short question when you need to know where they are.' + (S.share ? ctx() : '');
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
+      body: JSON.stringify({model: S.model, max_tokens: 1024, system, messages: S.chat.slice(-30).map(m => ({role: m.role, content: m.content}))})
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error((j.error && j.error.message) || ('Request failed with status ' + r.status));
+    S.chat.push({role: 'assistant', content: (j.content || []).map(c => c.text || '').join('')});
+    $('chatSt').textContent = '';
+  } catch (e) {
+    S.chat.push({role: 'assistant', err: true, content: 'Could not reach the API: ' + e.message});
+    $('chatSt').textContent = '';
+  }
+  busy = false; $('send').disabled = false; save(); renderChat();
+}
+$('apiKey').value = getKey(); $('model').value = S.model; $('share').checked = S.share;
+$('send').onclick = send;
+$('chatIn').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+$('clearChat').onclick = () => { S.chat = []; save(); renderChat(); };
+$('share').onchange = () => { S.share = $('share').checked; save(); };
+renderChat();
 $('st').innerHTML = STAGES.map((s, i) => '<option value="' + i + '">Starts in ' + s + '</option>').join('');
 initForm(); render(true);
 setInterval(() => render(false), 60000);
