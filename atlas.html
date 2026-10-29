@@ -571,7 +571,19 @@ function parseAtlasMarkdown(source) {
   const lines = source.replace(/\r/g, '').split('\n');
   const result = [], seen = new Set();
   let stage = 0;
+  let activeBrief = null;
   for (const line of lines) {
+    const taskHeading = line.match(/^#{2,4}\s+Task:\s+(.+?)\s*$/i);
+    if (taskHeading) {
+      const title = taskHeading[1].trim();
+      const existing = S.tasks.find(t => normalTitle(t.t) === normalTitle(title));
+      activeBrief = {title,externalId:'',stage:0,label:'Weekly plan',parent:'',type:'',done:false,existingId:existing ? existing.id : null,status:existing ? 'Already exists' : 'New',brief:''};
+      if (!seen.has('title:' + normalTitle(title))) {
+        seen.add('title:' + normalTitle(title)); result.push(activeBrief);
+      } else activeBrief = {brief:''};
+      continue;
+    }
+    if (activeBrief) { activeBrief.brief += line + '\n'; continue; }
     const heading = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
     if (heading) {
       const name = heading[1].replace(/^phase\s*[:\-]?\s*/i, '').trim();
@@ -596,6 +608,7 @@ function parseAtlasMarkdown(source) {
     const existing = S.tasks.find(t => externalId && t.externalId === externalId) || S.tasks.find(t => normalTitle(t.t) === normalTitle(title));
     result.push({title, externalId, stage:explicitStage >= 0 ? explicitStage : stage, label:props.label || '', parent:props.parent || '', type:props.type || '', done:item[1] && item[1].toLowerCase() === 'x', existingId:existing ? existing.id : null, status:existing ? 'Already exists' : 'New'});
   }
+  result.forEach(p => { if (p.brief) p.brief = p.brief.trim(); });
   return result;
 }
 function renderMdPreview(message) {
