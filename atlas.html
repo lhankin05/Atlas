@@ -325,7 +325,7 @@ function reviewMarkdown(t) {
       '### Passed test ' + (i+1) + '\n' + new Date(p.at).toLocaleString() + '\n\n' + p.note).join('\n\n') || 'No passed-test notes recorded') + '\n';
 }
 function renderArchive() {
-  const a = S.tasks.filter(t => t.done).slice().reverse();
+  const a = S.tasks.filter(t => t.done).slice().sort((a,b) => (Number(b.doneAt) || 0) - (Number(a.doneAt) || 0));
   $('exportAll').disabled = !a.length;
   $('archive').innerHTML = a.length ? a.map(t =>
     '<details class="task"><summary style="cursor:pointer"><strong>' + esc(t.t) +
