@@ -148,11 +148,10 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
         <p class="hint">Ask Atlas where you are, what to do next, or to help you get back on track.</p>
         <div class="set">
           <div class="row">
-            <input id="apiKey" type="password" placeholder="Anthropic API key" aria-label="Anthropic API key" autocomplete="off">
-            <input id="model" placeholder="Model" aria-label="Model">
+            <span class="pill">OpenAI · local .env key</span>
           </div>
           <label class="chk"><input type="checkbox" id="share"> Share my tasks and today's log with Atlas</label>
-          <span class="hint" style="margin:0">Your key stays in this browser. Chat messages, and your tasks if sharing is on, are sent to the Claude API.</span>
+          <span class="hint" style="margin:0">Chat messages and, if sharing is on, your task and log context are sent to OpenAI through the local server.</span>
         </div>
         <div class="chat" id="chat" aria-live="polite"></div>
         <textarea id="chatIn" placeholder="Message Atlas. Enter sends, Shift+Enter adds a line." aria-label="Message"></textarea>
@@ -179,7 +178,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
 (async function () {
 const K = 'atlas:v2';
 const STAGES = ['Brief', 'Design', 'Build', 'Test', 'Review', 'Push'];
-const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'claude-sonnet-5-5'};
+const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'gpt-4.1-mini'};
 const SLOTS = [
   {id: 'am', h: 9, m: 0, q: 'Morning check-in. What are you tackling today, and which stage is it in?'},
   {id: 'mid', h: 12, m: 30, q: 'Midday check-in. What got done this morning, and are you still on plan?'},
@@ -344,18 +343,17 @@ $('reflSave').onclick = () => {
 function initForm() {
   $('qs').innerHTML = QS.map((q, i) => '<label class="qq" for="q' + i + '">' + esc(q) + '</label><textarea id="q' + i + '"></textarea>').join('');
 }
-const getKey = () => S.apiKey || '';
+const getKey = () => true;
 const BASE = 'You are Atlas, a chief of staff for a developer building VR training experiences in Unity. Every task moves through Brief, Design, Build, Test, Review and Push. Keep the user on track and help when they get pulled between tasks. Be firm but friendly, concise and practical. Ask a short question when you need to know where they are.';
 const sysPrompt = () => BASE + (S.share ? ctx() : '');
 async function callApi(system, messages, max) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {'content-type': 'application/json', 'x-api-key': getKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
-    body: JSON.stringify({model: S.model, max_tokens: max, system, messages})
+  const r = await fetch('/api/ai', {
+    method: 'POST', headers: {'content-type': 'application/json'},
+    body: JSON.stringify({model: S.model || 'gpt-4.1-mini', max_tokens: max, system, messages})
   });
   const j = await r.json();
-  if (!r.ok) throw new Error((j.error && j.error.message) || ('Request failed with status ' + r.status));
-  return (j.content || []).map(c => c.text || '').join('').trim();
+  if (!r.ok) throw new Error(j.error || ('Request failed with status ' + r.status));
+  return (j.text || '').trim();
 }
 const asking = {};
 async function askQuestion(p) {
@@ -382,7 +380,7 @@ async function makePlan() {
   $('saved').innerHTML = '';
 }
 $('aiDig').onclick = async () => {
-  if (!getKey()) { $('digSt').textContent = 'Add your API key on the Chat page first.'; return; }
+  if (!getKey()) { $('digSt').textContent = 'Configure OPENAI_API_KEY in .env and restart Atlas.'; return; }
   const ws = weekStart(), done = S.tasks.filter(t => t.done && t.doneAt >= ws), lg = S.log.filter(e => e.ts >= ws).slice(-60);
   $('digSt').textContent = 'Atlas is reading your week...'; $('aiDig').disabled = true;
   try {
@@ -410,10 +408,8 @@ let busy = false;
 async function send() {
   const v = $('chatIn').value.trim(), key = $('apiKey').value.trim();
   if (busy) return;
-  if (!key) { $('chatSt').textContent = 'Add your API key first.'; $('apiKey').focus(); return; }
   if (!v) { $('chatIn').focus(); return; }
-  S.apiKey = key;
-  S.model = $('model').value.trim() || DEF.model; S.share = $('share').checked;
+  S.model = DEF.model; S.share = $('share').checked;
   S.chat = S.chat.filter(m => !m.err); S.chat.push({role: 'user', content: v}); $('chatIn').value = '';
   busy = true; $('send').disabled = true; $('chatSt').textContent = 'Atlas is thinking...'; save(); renderChat();
   try {
@@ -425,7 +421,7 @@ async function send() {
   }
   busy = false; $('send').disabled = false; save(); renderChat();
 }
-$('apiKey').value = getKey(); $('model').value = S.model; $('share').checked = S.share;
+$('share').checked = S.share;
 $('send').onclick = send;
 $('chatIn').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 $('clearChat').onclick = () => { S.chat = []; save(); renderChat(); };
