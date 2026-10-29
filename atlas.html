@@ -98,6 +98,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
     <button class="nav on" data-page="home">Home</button>
     <button class="nav" data-page="tasks">All tasks</button>
     <button class="nav" data-page="log">Log</button>
+    <button class="nav" data-page="archive">Archive</button>
     <button class="nav" data-page="daily">End-of-day review</button>
     <button class="nav" data-page="week">Weekly reflection</button>
     <button class="nav" data-page="chat">Chat with Atlas</button>
@@ -136,6 +137,9 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
       </section>
     </div>
 
+    <div class="page" id="p-archive" hidden>
+      <section class="card"><h2>Archive</h2><p class="hint">Completed tasks and their review documents.</p><div id="archive"></div></section>
+    </div>
     <div class="page" id="p-tasks" hidden>
       <section class="card">
         <h2>All tasks</h2>
@@ -308,6 +312,20 @@ function renderAll() {
     return '<h3>' + s + ' <span class="pill">' + a.length + '</span></h3>' + (a.length ? a.map(row).join('') : '<div class="empty">No tasks in ' + s + '.</div>');
   }).join('');
 }
+function reviewMarkdown(t) {
+  const failures = (t.testFailures || []).map((f,i) => '### Failed test ' + (i+1) + '\n' + new Date(f.at).toLocaleString() + '\n\n' + f.note).join('\n\n');
+  return '# ' + t.t + '\n\n## Project\n' + (t.label || 'Unlabelled') +
+    '\n\n## Review\n' + (t.reviewNotes || 'No review notes') +
+    '\n\n## Testing history\n' + (failures || 'No failed tests recorded') + '\n';
+}
+function renderArchive() {
+  const a = S.tasks.filter(t => t.done).slice().reverse();
+  $('archive').innerHTML = a.length ? a.map(t =>
+    '<div class="task"><div class="tt"><span class="t">' + esc(t.t) +
+    '</span><span class="pill">' + esc(t.label || 'No label') +
+    '</span></div><div class="acts"><button class="mini" data-export="' + t.id +
+    '">Download Markdown</button></div></div>').join('') : '<div class="empty">No archived tasks yet.</div>';
+}
 function renderLog() {
   const dk = dayKey(new Date()), items = S.log.filter(e => dayKey(new Date(e.ts)) === dk).reverse();
   $('log').innerHTML = items.length ? items.map(e => '<div class="entry"><div class="m">' + hm(e.ts) + (e.tag ? ' - ' + esc(e.tag) : '') + '</div>' + esc(e.text) + '</div>').join('')
@@ -403,10 +421,10 @@ function render(force) {
   $('sv').textContent = remote ? 'Saved to file' : 'Saved in this browser';
   const nb = S.tasks.filter(t => !t.done && t.stage === 1).length;
   $('bn').textContent = nb + (nb === 1 ? ' task in Build' : ' tasks in Build');
-  renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force); renderDaily();
+  renderToday(); renderUp(); renderAll(); renderArchive(); renderLog(); renderWeek(); renderCheckin(force); renderDaily();
 }
 function show(page) {
-  ['home', 'tasks', 'log', 'daily', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
+  ['home', 'tasks', 'log', 'archive', 'daily', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
   document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.page === page));
 }
 
@@ -414,6 +432,14 @@ document.addEventListener('click', e => {
   const b = e.target.closest('button,input[type=checkbox]'); if (!b) return;
   const d = b.dataset, find = id => S.tasks.find(x => x.id == id);
   if (d.page) { show(d.page); return; }
+  if (d.export) {
+    const t = find(d.export); if (!t) return;
+    const blob = new Blob([reviewMarkdown(t)], {type:'text/markdown;charset=utf-8'});
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = (t.t.replace(/[^a-z0-9-_]+/gi,'-').slice(0,80) || 'review') + '.md';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  }
   if (d.grp !== undefined) { open[d.grp] = !open[d.grp]; renderUp(); return; }
   if (d.fail) {
     const t = find(d.fail); if (!t || t.done || t.stage !== 2) return;
