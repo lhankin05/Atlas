@@ -49,6 +49,10 @@ button.ghost{background:none;color:var(--mut)}
 .seg.on{background:var(--accbg);border-color:var(--acc);color:var(--acc);font-weight:600}
 .acts{display:flex;gap:6px}
 .mini{padding:3px 10px;font-size:12.5px;background:none;color:var(--mut)}
+.up-list{display:grid;gap:4px}
+.up-item{display:flex;align-items:center;gap:12px;padding:8px 2px;border-bottom:1px solid var(--line)}
+.up-item:last-child{border-bottom:0}
+.up-item .t{flex:1;min-width:0;overflow-wrap:anywhere}
 .grp{margin-top:8px}
 .gh{width:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;border-radius:16px;padding:12px 14px}
 .gh::before{content:"+";color:var(--acc);font-weight:700;width:12px}
@@ -115,7 +119,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
 
       <section class="card" aria-labelledby="h-up">
         <h2 id="h-up">Coming up</h2>
-        <p class="hint">Tasks grouped by label. Select a label to see its tasks.</p>
+        <p class="hint">Upcoming task titles. Select Do today to move one onto today’s list.</p>
         <div id="upcoming"></div>
       </section>
 
@@ -272,16 +276,11 @@ function renderToday() {
   $('today').innerHTML = a.length ? a.map(todayRow).join('') : '<div class="empty">Nothing planned for today. Choose Do today on a task below.</div>';
 }
 function renderUp() {
-  const a = S.tasks.filter(t => !t.today && !t.done), g = {};
-  a.forEach(t => { const n = t.label || 'No label'; (g[n] = g[n] || []).push(t); });
-  const keys = Object.keys(g);
-  $('upcoming').innerHTML = keys.length ? keys.map(n => {
-    const ts = g[n], c = STAGES.map((s, i) => [s, ts.filter(t => t.stage === i).length]).filter(x => x[1]);
-    return '<div class="grp"><button class="gh' + (open[n] ? ' open' : '') + '" data-grp="' + esc(n) + '"><span class="nm">' + esc(n) +
-      '</span><span class="cnt">' + ts.length + (ts.length === 1 ? ' task' : ' tasks') + '</span>' +
-      c.map(x => '<span class="pill">' + x[0] + ' ' + x[1] + '</span>').join('') + '</button>' +
-      (open[n] ? '<div class="gb">' + ts.map(row).join('') + '</div>' : '') + '</div>';
-  }).join('') : '<div class="empty">Nothing coming up. Add tasks on the All tasks page.</div>';
+  const a = S.tasks.filter(t => !t.today && !t.done);
+  $('upcoming').innerHTML = a.length ? '<div class="up-list">' + a.map(t =>
+    '<div class="up-item"><span class="t">' + esc(t.t) +
+    '</span><button class="mini" data-day="' + t.id + '">Do today</button></div>'
+  ).join('') + '</div>' : '<div class="empty">Nothing coming up. Add tasks on the All tasks page.</div>';
   $('labs').innerHTML = [...new Set(S.tasks.map(t => t.label).filter(Boolean))].map(l => '<option value="' + esc(l) + '">').join('');
 }
 function renderAll() {
