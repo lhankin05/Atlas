@@ -275,7 +275,7 @@ function row(t) {
   return '<div class="task"><div class="tt"><input type="checkbox" data-done="' + t.id + '" aria-label="Mark done"><span class="t">' + esc(t.t) +
     '</span><span class="pill">' + esc(t.label || 'No label') + '</span></div><div class="steps">' + seg +
     '</div><div class="acts">' + (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
-    (t.stage === 3 ? '<button class="mini" data-review="' + t.id + '">Write review</button>' : '') +
+    '' +
     '<button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
     '</button><button class="mini" data-del="' + t.id + '">Delete</button></div>' + taskNoteEditor(t) + '</div>';
 }
@@ -292,9 +292,9 @@ function todayRow(t) {
   const stage = STAGES[Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0))];
   return '<div class="task"><div class="tt"><span class="t">' + esc(t.t) +
     '</span></div><div class="row" style="margin-top:10px"><button class="main" data-advance="' + t.id +
-    '">' + (t.stage === 2 ? 'Pass test' : t.stage === 3 ? 'Complete Review' : t.stage === 4 ? 'Archive task' : 'Complete ' + esc(stage) + ' Stage') + '</button>' +
+    '">' + (t.stage === 2 ? 'Pass test' : t.stage === 3 ? (t.reviewNotes ? 'Submit Review' : 'Complete Review') : t.stage === 4 ? 'Archive task' : 'Complete ' + esc(stage) + ' Stage') + '</button>' +
     (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
-    (t.stage === 3 ? '<button class="mini" data-review="' + t.id + '">Write review</button>' : '') +
+    '' +
     '<button class="mini" data-day="' + t.id +
     '">Move to later</button></div>' + taskNoteEditor(t) + '</div>';
 }
