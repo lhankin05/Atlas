@@ -205,7 +205,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
 <script>
 (async function () {
 const K = 'atlas:v2';
-const STAGES = ['Brief', 'Design', 'Build', 'Test', 'Review', 'Push'];
+const STAGES = ['Brief', 'Build', 'Test', 'Review', 'Archive'];
 const DEF = {tasks: [], log: [], refl: [], dailyReviews: [], dailyDraft: null, focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'gpt-4.1-mini'};
 const SLOTS = [
   {id: 'am', h: 9, m: 0, q: 'Morning check-in. What are you tackling today, and which stage is it in?'},
@@ -225,6 +225,14 @@ try {
   }
 } catch (e) {}
 if (!S) { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); } }
+if (S.pipelineVersion !== 2) {
+  (S.tasks || []).forEach(t => {
+    const n = Number(t.stage) || 0;
+    t.stage = n === 0 ? 0 : n <= 2 ? 1 : n === 3 ? 2 : n === 4 ? 3 : 4;
+    t.testFailures = t.testFailures || [];
+  });
+  S.pipelineVersion = 2;
+}
 const hadLegacyKey = !!S.apiKey; delete S.apiKey; S.dailyReviews = S.dailyReviews || []; S.dailyDraft = S.dailyDraft || null;
 const flush = () => {
   if (!remote) return; clearTimeout(tmr); tmr = null;
@@ -234,7 +242,7 @@ const save = () => {
   try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {}
   if (remote) { clearTimeout(tmr); tmr = setTimeout(flush, 250); }
 };
-if (hadLegacyKey) save();
+save();
 window.addEventListener('pagehide', () => { if (tmr) flush(); });
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -267,14 +275,19 @@ function row(t) {
   const seg = STAGES.map((s, i) => '<button class="seg' + (i === t.stage ? ' on' : i < t.stage ? ' past' : '') + '" data-set="' + t.id + ':' + i + '">' + s + '</button>').join('');
   return '<div class="task"><div class="tt"><input type="checkbox" data-done="' + t.id + '" aria-label="Mark done"><span class="t">' + esc(t.t) +
     '</span><span class="pill">' + esc(t.label || 'No label') + '</span></div><div class="steps">' + seg +
-    '</div><div class="acts"><button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
+    '</div><div class="acts">' + (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
+    (t.stage === 3 ? '<button class="mini" data-review="' + t.id + '">Write review</button>' : '') +
+    '<button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
     '</button><button class="mini" data-del="' + t.id + '">Delete</button></div></div>';
 }
 function todayRow(t) {
   const stage = STAGES[Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0))];
   return '<div class="task"><div class="tt"><span class="t">' + esc(t.t) +
     '</span></div><div class="row" style="margin-top:10px"><button class="main" data-advance="' + t.id +
-    '">Complete ' + esc(stage) + ' Stage</button><button class="mini" data-day="' + t.id +
+    '">' + (t.stage === 2 ? 'Pass test' : t.stage === 3 ? 'Complete Review' : t.stage === 4 ? 'Archive task' : 'Complete ' + esc(stage) + ' Stage') + '</button>' +
+    (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
+    (t.stage === 3 ? '<button class="mini" data-review="' + t.id + '">Write review</button>' : '') +
+    '<button class="mini" data-day="' + t.id +
     '">Move to later</button></div></div>';
 }
 function renderToday() {
@@ -388,7 +401,7 @@ function renderCheckin(force) {
 function render(force) {
   $('date').textContent = new Date().toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'});
   $('sv').textContent = remote ? 'Saved to file' : 'Saved in this browser';
-  const nb = S.tasks.filter(t => !t.done && t.stage === 2).length;
+  const nb = S.tasks.filter(t => !t.done && t.stage === 1).length;
   $('bn').textContent = nb + (nb === 1 ? ' task in Build' : ' tasks in Build');
   renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force); renderDaily();
 }
@@ -402,8 +415,23 @@ document.addEventListener('click', e => {
   const d = b.dataset, find = id => S.tasks.find(x => x.id == id);
   if (d.page) { show(d.page); return; }
   if (d.grp !== undefined) { open[d.grp] = !open[d.grp]; renderUp(); return; }
-  if (d.advance) {
+  if (d.fail) {
+    const t = find(d.fail); if (!t || t.done || t.stage !== 2) return;
+    const note = prompt('What failed during testing?');
+    if (!note || !note.trim()) return;
+    t.testFailures = t.testFailures || [];
+    t.testFailures.push({at: Date.now(), note: note.trim()});
+    t.stage = 1;
+    addLog('Test failed for ' + t.t + ': ' + note.trim(), 'Test failure');
+  } else if (d.review) {
+    const t = find(d.review); if (!t || t.done) return;
+    const note = prompt('Describe what you built, how it works, and problems solved:', t.reviewNotes || '');
+    if (note === null) return;
+    t.reviewNotes = note.trim();
+    addLog('Review saved for ' + t.t, 'Review');
+  } else if (d.advance) {
     const t = find(d.advance); if (!t || t.done) return;
+    if (t.stage === 3 && !t.reviewNotes) { alert('Write review notes before advancing.'); return; }
     const i = Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0));
     if (i === STAGES.length - 1) {
       t.done = true; t.doneAt = Date.now();
@@ -429,7 +457,7 @@ document.addEventListener('click', e => {
    ## Build
    - [ ] [ATLAS-001] Create steering wheel model | parent=ATLAS-ROOT | label=Tractor
    - [x] [ATLAS-002] Finished modelling
-   Headings Brief, Design, Build, Test, Review, Push set stage.
+   Headings Brief, Build, Test, Review, Archive set stage.
    Optional stable IDs prevent duplicate imports. */
 let mdProposals = [];
 const normalTitle = v => String(v || '').trim().toLocaleLowerCase();
