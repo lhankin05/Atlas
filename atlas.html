@@ -624,7 +624,17 @@ $('mdFile').addEventListener('change', async e => {
   const file = e.target.files[0]; if (!file) return;
   if (!/\.(md|markdown)$/i.test(file.name)) { renderMdPreview('Please select a Markdown (.md) file.'); return; }
   if (file.size > 1024 * 1024) { renderMdPreview('File is too large. Maximum size is 1 MB.'); return; }
-  try { mdProposals = parseAtlasMarkdown(await file.text()); renderMdPreview(); }
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let encoding = 'utf-8';
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
+    else if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
+    else if (bytes.length >= 4 && bytes[1] === 0 && bytes[3] === 0) encoding = 'utf-16le';
+    else if (bytes.length >= 4 && bytes[0] === 0 && bytes[2] === 0) encoding = 'utf-16be';
+    const source = new TextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, '');
+    mdProposals = parseAtlasMarkdown(source);
+    renderMdPreview(mdProposals.length ? '' : 'No tasks recognised in ' + file.name + ' (' + encoding + '). Use headings like ## Task: Task name, or Markdown checklist items.');
+  }
   catch (err) { renderMdPreview('Could not read this file: ' + err.message); }
 });
 $('mdPreview').addEventListener('click', e => {
