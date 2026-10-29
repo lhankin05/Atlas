@@ -151,8 +151,8 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
             <input id="apiKey" type="password" placeholder="Anthropic API key" aria-label="Anthropic API key" autocomplete="off">
             <input id="model" placeholder="Model" aria-label="Model">
           </div>
-          <label class="chk"><input type="checkbox" id="share"> Share my tasks and today's log with Atlas</label>
-          <span class="hint" style="margin:0">Your key stays in this browser. Chat messages, and your tasks if sharing is on, are sent to the Claude API.</span>
+          <label class="chk"><input type="checkbox" id="share"> Share my work context with Atlas</label>
+          <span class="hint" style="margin:0">Your API key is kept only in this page session and is not saved with your data. Chat messages you send go to the Claude API. When sharing is on, Atlas may also send your tasks, log entries, and weekly reflection answers.</span>
         </div>
         <div class="chat" id="chat" aria-live="polite"></div>
         <textarea id="chatIn" placeholder="Message Atlas. Enter sends, Shift+Enter adds a line." aria-label="Message"></textarea>
@@ -198,6 +198,10 @@ try {
   }
 } catch (e) {}
 if (!S) { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); } }
+// Migrate older saved state: never persist an API key with app data.
+const hadStoredKey = Object.prototype.hasOwnProperty.call(S, 'apiKey');
+delete S.apiKey;
+let apiKey = '';
 const flush = () => {
   if (!remote) return; clearTimeout(tmr); tmr = null;
   fetch('/api/data', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(S), keepalive: true}).catch(() => {});
@@ -344,7 +348,7 @@ $('reflSave').onclick = () => {
 function initForm() {
   $('qs').innerHTML = QS.map((q, i) => '<label class="qq" for="q' + i + '">' + esc(q) + '</label><textarea id="q' + i + '"></textarea>').join('');
 }
-const getKey = () => S.apiKey || '';
+const getKey = () => apiKey;
 const BASE = 'You are Atlas, a chief of staff for a developer building VR training experiences in Unity. Every task moves through Brief, Design, Build, Test, Review and Push. Keep the user on track and help when they get pulled between tasks. Be firm but friendly, concise and practical. Ask a short question when you need to know where they are.';
 const sysPrompt = () => BASE + (S.share ? ctx() : '');
 async function callApi(system, messages, max) {
@@ -375,8 +379,10 @@ async function makePlan() {
   if (!r || !getKey()) return;
   $('saved').innerHTML = '<span class="ok">Saved. Atlas is writing your plan...</span>';
   try {
-    r.plan = await callApi(sysPrompt(), [{role: 'user', content: 'Here are my weekly reflection answers.\n\n' + QS.map((q, i) => q + '\n' + (r.a[i] || '(no answer)')).join('\n\n') +
-      '\n\nGive me a short plan for next week: 3 to 5 next tasks in order, and one thing to watch for.'}], 500);
+    const request = S.share
+      ? 'Here are my weekly reflection answers.\n\n' + QS.map((q, i) => q + '\n' + (r.a[i] || '(no answer)')).join('\n\n') + '\n\nGive me a short plan for next week: 3 to 5 next tasks in order, and one thing to watch for.'
+      : 'The user has opted not to share personal work context. Give a generic, reusable weekly planning template with 3 to 5 next-task slots in order and one general thing to watch for. Do not infer or refer to their private tasks or reflection answers.';
+    r.plan = await callApi(sysPrompt(), [{role: 'user', content: request}], 500);
     save(); renderWeek();
   } catch (e) { $('saved').innerHTML = '<span class="hint">Plan failed: ' + esc(e.message) + '</span>'; return; }
   $('saved').innerHTML = '';
@@ -386,9 +392,10 @@ $('aiDig').onclick = async () => {
   const ws = weekStart(), done = S.tasks.filter(t => t.done && t.doneAt >= ws), lg = S.log.filter(e => e.ts >= ws).slice(-60);
   $('digSt').textContent = 'Atlas is reading your week...'; $('aiDig').disabled = true;
   try {
-    const text = await callApi(sysPrompt(), [{role: 'user', content: 'Summarise my week. Completed tasks:\n' + (done.map(t => '- ' + t.t).join('\n') || 'none') +
-      '\n\nLog entries:\n' + (lg.map(e => hm(e.ts) + ' ' + e.text).join('\n') || 'none') +
-      '\n\nGive a short digest: topics covered, what got done, and where I seem to be in the pipeline. Use plain short paragraphs or a few lines.'}], 500);
+    const request = S.share
+      ? 'Summarise my week. Completed tasks:\n' + (done.map(t => '- ' + t.t).join('\n') || 'none') + '\n\nLog entries:\n' + (lg.map(e => hm(e.ts) + ' ' + e.text).join('\n') || 'none') + '\n\nGive a short digest: topics covered, what got done, and where I seem to be in the pipeline. Use plain short paragraphs or a few lines.'
+      : 'The user has opted not to share personal work context. Do not summarise or infer anything about their private tasks or log. Provide a short generic weekly-review template with prompts for accomplishments, topics, and pipeline status.';
+    const text = await callApi(sysPrompt(), [{role: 'user', content: request}], 500);
     S.digestAI = {ws, text}; save(); renderWeek(); $('digSt').textContent = '';
   } catch (e) { $('digSt').textContent = 'Could not reach the API: ' + e.message; }
   $('aiDig').disabled = false;
@@ -412,7 +419,7 @@ async function send() {
   if (busy) return;
   if (!key) { $('chatSt').textContent = 'Add your API key first.'; $('apiKey').focus(); return; }
   if (!v) { $('chatIn').focus(); return; }
-  S.apiKey = key;
+  apiKey = key;
   S.model = $('model').value.trim() || DEF.model; S.share = $('share').checked;
   S.chat = S.chat.filter(m => !m.err); S.chat.push({role: 'user', content: v}); $('chatIn').value = '';
   busy = true; $('send').disabled = true; $('chatSt').textContent = 'Atlas is thinking...'; save(); renderChat();
@@ -425,7 +432,7 @@ async function send() {
   }
   busy = false; $('send').disabled = false; save(); renderChat();
 }
-$('apiKey').value = getKey(); $('model').value = S.model; $('share').checked = S.share;
+$('apiKey').value = ''; $('model').value = S.model; $('share').checked = S.share;
 $('send').onclick = send;
 $('chatIn').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 $('clearChat').onclick = () => { S.chat = []; save(); renderChat(); };
@@ -433,7 +440,7 @@ $('share').onchange = () => { S.share = $('share').checked; save(); };
 renderChat();
 $('st').innerHTML = STAGES.map((s, i) => '<option value="' + i + '">Starts in ' + s + '</option>').join('');
 initForm(); render(true);
-if (remote && !hadRemote) save();
+if ((remote && !hadRemote) || hadStoredKey) save();
 setInterval(() => render(false), 60000);
 })();
 </script>
