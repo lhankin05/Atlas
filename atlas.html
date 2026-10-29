@@ -102,7 +102,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
       <div class="r1">
         <section class="card" aria-labelledby="h-today">
           <h2 id="h-today">Today's tasks</h2>
-          <p class="hint">Click a stage to move a task along the pipeline.</p>
+          <p class="hint">Complete the current stage to move forward. Tasks stay on today’s list.</p>
           <div id="today"></div>
         </section>
         <section class="card" aria-labelledby="h-check">
@@ -260,9 +260,16 @@ function row(t) {
     '</div><div class="acts"><button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
     '</button><button class="mini" data-del="' + t.id + '">Delete</button></div></div>';
 }
+function todayRow(t) {
+  const stage = STAGES[Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0))];
+  return '<div class="task"><div class="tt"><span class="t">' + esc(t.t) +
+    '</span></div><div class="row" style="margin-top:10px"><button class="main" data-advance="' + t.id +
+    '">Complete ' + esc(stage) + ' Stage</button><button class="mini" data-day="' + t.id +
+    '">Move to later</button></div></div>';
+}
 function renderToday() {
   const a = S.tasks.filter(t => t.today && !t.done);
-  $('today').innerHTML = a.length ? a.map(row).join('') : '<div class="empty">Nothing planned for today. Choose Do today on a task below.</div>';
+  $('today').innerHTML = a.length ? a.map(todayRow).join('') : '<div class="empty">Nothing planned for today. Choose Do today on a task below.</div>';
 }
 function renderUp() {
   const a = S.tasks.filter(t => !t.today && !t.done), g = {};
@@ -390,7 +397,18 @@ document.addEventListener('click', e => {
   const d = b.dataset, find = id => S.tasks.find(x => x.id == id);
   if (d.page) { show(d.page); return; }
   if (d.grp !== undefined) { open[d.grp] = !open[d.grp]; renderUp(); return; }
-  if (d.set) {
+  if (d.advance) {
+    const t = find(d.advance); if (!t || t.done) return;
+    const i = Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0));
+    if (i === STAGES.length - 1) {
+      t.done = true; t.doneAt = Date.now();
+      addLog('Completed: ' + t.t, 'Task done');
+    } else {
+      t.stage = i + 1;
+      addLog(t.t + ' moved to ' + STAGES[t.stage], 'Stage change');
+      S.pending = {kind: 'stage', q: '"' + t.t + '" is now in ' + STAGES[t.stage] + '. What is the next step?', tag: 'Stage change'};
+    }
+  } else if (d.set) {
     const [id, i] = d.set.split(':'), t = find(id);
     if (t.stage === +i) return;
     t.stage = +i; addLog(t.t + ' moved to ' + STAGES[+i], 'Stage change');
