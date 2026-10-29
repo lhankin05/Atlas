@@ -139,6 +139,12 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
           <textarea id="newT" placeholder="Add tasks, one per line" aria-label="New tasks"></textarea>
           <div class="row end" style="margin-top:0"><button class="main" id="addT">Add tasks</button></div>
         </div>
+        <section class="digest" aria-labelledby="importHeading">
+          <h3 id="importHeading">Import tasks from Markdown</h3>
+          <p class="hint">Choose a .md file generated from your ChatGPT Voice planning session. Preview and approve changes before saving. No API credits required.</p>
+          <input type="file" id="mdFile" accept=".md,.markdown,text/markdown,text/plain" aria-label="Choose Markdown task file">
+          <div id="mdPreview" aria-live="polite"></div>
+        </section>
         <div id="byStage"></div>
       </section>
     </div>
@@ -395,6 +401,77 @@ document.addEventListener('click', e => {
   else return;
   save(); render(true);
 });
+
+/* Markdown import format:
+   ## Build
+   - [ ] [ATLAS-001] Create steering wheel model | parent=ATLAS-ROOT | label=Tractor
+   - [x] [ATLAS-002] Finished modelling
+   Headings Brief, Design, Build, Test, Review, Push set stage.
+   Optional stable IDs prevent duplicate imports. */
+let mdProposals = [];
+const normalTitle = v => String(v || '').trim().toLocaleLowerCase();
+function parseAtlasMarkdown(source) {
+  const lines = source.replace(/\r/g, '').split('\n');
+  const result = [], seen = new Set();
+  let stage = 0;
+  for (const line of lines) {
+    const heading = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      const name = heading[1].replace(/^phase\s*[:\-]?\s*/i, '').trim();
+      const idx = STAGES.findIndex(s => s.toLowerCase() === name.toLowerCase() || (s === 'Build' && /^unity\s+build$/i.test(name)));
+      if (idx >= 0) stage = idx;
+      continue;
+    }
+    const item = line.match(/^\s*[-*]\s+(?:\[([ xX])\]\s*)?(.+?)\s*$/);
+    if (!item) continue;
+    let body = item[2];
+    let externalId = '';
+    const idMatch = body.match(/^\[([A-Za-z0-9][A-Za-z0-9._:-]{1,63})\]\s*/);
+    if (idMatch) { externalId = idMatch[1]; body = body.slice(idMatch[0].length); }
+    const parts = body.split(/\s+\|\s+/), title = (parts.shift() || '').trim();
+    if (!title || /^https?:\/\//i.test(title)) continue;
+    const props = {};
+    for (const p of parts) { const m = p.match(/^(stage|label|parent|type)\s*=\s*(.+)$/i); if (m) props[m[1].toLowerCase()] = m[2].trim(); }
+    const explicitStage = STAGES.findIndex(s => s.toLowerCase() === (props.stage || '').toLowerCase());
+    const key = externalId ? 'id:' + externalId.toLowerCase() : 'title:' + normalTitle(title);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const existing = S.tasks.find(t => externalId && t.externalId === externalId) || S.tasks.find(t => normalTitle(t.t) === normalTitle(title));
+    result.push({title, externalId, stage:explicitStage >= 0 ? explicitStage : stage, label:props.label || '', parent:props.parent || '', type:props.type || '', done:item[1] && item[1].toLowerCase() === 'x', existingId:existing ? existing.id : null, status:existing ? 'Already exists' : 'New'});
+  }
+  return result;
+}
+function renderMdPreview(message) {
+  const root = $('mdPreview');
+  if (message) { root.innerHTML = '<p class="hint">' + esc(message) + '</p>'; return; }
+  if (!mdProposals.length) { root.innerHTML = '<p class="hint">No Markdown list items found. Use lines such as - [ ] [TASK-001] Model steering wheel under a ## Build heading.</p>'; return; }
+  const fresh = mdProposals.filter(p => !p.existingId).length;
+  root.innerHTML = '<p class="hint">' + mdProposals.length + ' tasks found; ' + fresh + ' new. Existing tasks are skipped to avoid duplicates.</p>' +
+    mdProposals.map((p,i) => '<div class="task"><label class="chk"><input type="checkbox" data-md-select="' + i + '" ' + (p.existingId ? 'disabled' : 'checked') + '><b>' + esc(p.title) + '</b></label><div class="hint">' + esc(STAGES[p.stage]) + ' · ' + esc(p.status) + (p.externalId ? ' · ' + esc(p.externalId) : '') + (p.parent ? ' · Parent: ' + esc(p.parent) : '') + '</div></div>').join('') +
+    '<div class="row end"><button type="button" id="mdCancel">Cancel</button><button type="button" class="main" id="mdApprove" ' + (fresh ? '' : 'disabled') + '>Approve selected new tasks</button></div>';
+}
+$('mdFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  if (!/\.(md|markdown)$/i.test(file.name)) { renderMdPreview('Please select a Markdown (.md) file.'); return; }
+  if (file.size > 1024 * 1024) { renderMdPreview('File is too large. Maximum size is 1 MB.'); return; }
+  try { mdProposals = parseAtlasMarkdown(await file.text()); renderMdPreview(); }
+  catch (err) { renderMdPreview('Could not read this file: ' + err.message); }
+});
+$('mdPreview').addEventListener('click', e => {
+  if (e.target.id === 'mdCancel') { mdProposals = []; $('mdFile').value = ''; renderMdPreview('Import cancelled. No changes were made.'); }
+  if (e.target.id === 'mdApprove') {
+    const chosen = [...$('mdPreview').querySelectorAll('[data-md-select]:checked')].map(el => mdProposals[Number(el.dataset.mdSelect)]).filter(p => p && !p.existingId);
+    let added = 0;
+    for (const p of chosen) {
+      if (S.tasks.some(t => (p.externalId && t.externalId === p.externalId) || normalTitle(t.t) === normalTitle(p.title))) continue;
+      S.tasks.push({id:Date.now() + added + Math.floor(Math.random()*100000),externalId:p.externalId || undefined,t:p.title,label:p.label || 'Markdown import',stage:p.stage,parentExternalId:p.parent || undefined,type:p.type || undefined,today:false,done:!!p.done,doneAt:p.done ? Date.now() : undefined});
+      added++;
+    }
+    if (added) addLog('Imported ' + added + ' tasks from Markdown','Import');
+    save(); render(true); mdProposals = []; $('mdFile').value = ''; renderMdPreview('Imported ' + added + ' tasks. Existing tasks were not changed.');
+  }
+});
+
 $('addT').onclick = () => {
   const lines = $('newT').value.split('\n').map(s => s.trim()).filter(Boolean);
   if (!lines.length) { $('newT').focus(); return; }
