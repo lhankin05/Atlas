@@ -1,3 +1,5 @@
 atlas-data.json
 atlas-data.json.tmp
+.env
 __pycache__/
+*.py[cod]
