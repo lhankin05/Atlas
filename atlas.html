@@ -573,7 +573,7 @@ function parseAtlasMarkdown(source) {
   let stage = 0;
   let activeBrief = null;
   for (const line of lines) {
-    const taskHeading = line.match(/^#{2,4}\s+Task:\s+(.+?)\s*$/i);
+    const taskHeading = line.replace(/^\uFEFF/, '').trim().match(/^#{1,6}\s*Task\s*[:：-]\s*(.+?)\s*#*\s*$/i);
     if (taskHeading) {
       const title = taskHeading[1].trim();
       const existing = S.tasks.find(t => normalTitle(t.t) === normalTitle(title));
@@ -631,9 +631,9 @@ $('mdFile').addEventListener('change', async e => {
     else if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
     else if (bytes.length >= 4 && bytes[1] === 0 && bytes[3] === 0) encoding = 'utf-16le';
     else if (bytes.length >= 4 && bytes[0] === 0 && bytes[2] === 0) encoding = 'utf-16be';
-    const source = new TextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, '');
+    const source = new TextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, '').replace(/\u0000/g, '');
     mdProposals = parseAtlasMarkdown(source);
-    renderMdPreview(mdProposals.length ? '' : 'No tasks recognised in ' + file.name + ' (' + encoding + '). Use headings like ## Task: Task name, or Markdown checklist items.');
+    renderMdPreview(mdProposals.length ? '' : 'No tasks recognised in ' + file.name + ' (' + encoding + '). First line read: ' + JSON.stringify(source.split(/\r?\n/).find(x => x.trim()) || '(empty)').slice(0,180) + '. Expected a heading such as ## Task: Task name.');
   }
   catch (err) { renderMdPreview('Could not read this file: ' + err.message); }
 });
