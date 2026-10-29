@@ -14,7 +14,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(ROOT, "atlas-data.json")
 ENV_FILE = os.path.join(ROOT, ".env")
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 8000
 HOSTS = {f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
 ORIGINS = {f"http://{h}" for h in HOSTS}
 PUBLIC = {"/atlas.html", "/favicon.ico"}
