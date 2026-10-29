@@ -85,6 +85,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
     <h1>Atlas</h1>
     <span class="sp"></span>
     <span class="sub" id="date"></span>
+    <span class="pill" id="sv"></span>
     <span class="pill acc" id="bn"></span>
   </header>
 
@@ -164,14 +165,18 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
         <div class="row"><h2>Weekly reflection</h2><span class="sp"></span><span id="due"></span></div>
         <p class="hint">Review the week, then answer. Your last answer sets next week's focus.</p>
         <div class="digest" id="digest"></div>
+        <div class="row" style="margin-bottom:12px"><button id="aiDig">Ask Atlas to summarise my week</button><span id="digSt" class="hint" style="margin:0"></span></div>
+        <div id="aiDigest"></div>
         <div id="qs"></div>
         <div class="row end"><span id="saved"></span><button class="main" id="reflSave">Save reflection</button></div>
+        <div id="plan"></div>
       </section>
     </div>
   </main>
 </div>
 
 <script>
+(async function () {
 const K = 'atlas:v2';
 const STAGES = ['Brief', 'Design', 'Build', 'Test', 'Review', 'Push'];
 const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'claude-sonnet-5-5'};
@@ -183,9 +188,25 @@ const SLOTS = [
 const QS = ['What did I complete this week?', 'Where am I in the project right now?', 'What is blocking or slowing me down?',
   'What pulled me off track, and how did I handle it?', 'What are my top priorities for next week?'];
 
-let S;
-try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); }
-const save = () => { try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {} };
+let S, remote = false, hadRemote = false, tmr = null;
+try {
+  const r = await fetch('/api/data');
+  if (r.ok && (r.headers.get('content-type') || '').includes('json')) {
+    remote = true;
+    const j = await r.json();
+    if (j && Object.keys(j).length) { S = Object.assign({}, DEF, j); hadRemote = true; }
+  }
+} catch (e) {}
+if (!S) { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); } }
+const flush = () => {
+  if (!remote) return; clearTimeout(tmr); tmr = null;
+  fetch('/api/data', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(S), keepalive: true}).catch(() => {});
+};
+const save = () => {
+  try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {}
+  if (remote) { clearTimeout(tmr); tmr = setTimeout(flush, 250); }
+};
+window.addEventListener('pagehide', () => { if (tmr) flush(); });
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const two = n => String(n).padStart(2, '0');
@@ -197,14 +218,14 @@ const open = {};
 let lastKey = null;
 
 function getPrompt() {
-  if (S.pending) return S.pending;
+  if (S.pending) return Object.assign({key: 'st' + S.pending.q}, S.pending);
   const n = new Date(), mins = n.getHours() * 60 + n.getMinutes(), dk = dayKey(n);
   for (const s of [...SLOTS].reverse()) {
-    if (mins >= s.h * 60 + s.m && !S.slots[dk + s.id]) return {kind: 'slot', id: dk + s.id, q: s.q, tag: 'Scheduled'};
+    if (mins >= s.h * 60 + s.m && !S.slots[dk + s.id]) return {kind: 'slot', id: dk + s.id, key: dk + s.id, q: s.q, tag: 'Scheduled'};
   }
   const last = S.log.length ? S.log[S.log.length - 1].ts : 0, gap = Math.round((Date.now() - last) / 60000);
   if (last && mins >= 540 && mins < 1080 && gap >= 90 && Date.now() > S.snooze)
-    return {kind: 'gap', q: 'It has been ' + gap + ' minutes since your last update. What are you on now, and has anything pulled you off track?', tag: 'Long gap'};
+    return {kind: 'gap', key: 'gap' + last, q: 'It has been ' + gap + ' minutes since your last update. What are you on now, and has anything pulled you off track?', tag: 'Long gap'};
   return null;
 }
 function resolve(p, skipped) {
@@ -253,11 +274,17 @@ function renderWeek() {
   const entries = S.log.filter(e => e.ts >= ws).length, moves = S.log.filter(e => e.ts >= ws && e.tag === 'Stage change').length;
   $('digest').innerHTML = '<b>This week so far</b><ul><li>' + done.length + (done.length === 1 ? ' task' : ' tasks') + ' completed</li>' +
     done.map(t => '<li>' + esc(t.t) + '</li>').join('') + '<li>' + entries + ' log entries</li><li>' + moves + (moves === 1 ? ' stage change' : ' stage changes') + '</li></ul>';
+  $('aiDigest').innerHTML = S.digestAI && S.digestAI.ws === ws ? '<div class="digest" style="white-space:pre-wrap"><b>Atlas\'s summary</b>\n' + esc(S.digestAI.text) + '</div>' : '';
+  const lr = S.refl.filter(r => r.plan).pop();
+  $('plan').innerHTML = lr ? '<div class="digest" style="white-space:pre-wrap;margin-top:16px"><b>Atlas\'s plan for next week</b>\n' + esc(lr.plan) + '</div>' : '';
   const n = new Date(), late = n.getDay() === 0 || n.getDay() === 6 || (n.getDay() === 5 && n.getHours() >= 16);
   $('due').innerHTML = S.refl.some(r => r.ts >= ws) ? '<span class="pill">Done for this week</span>' : late ? '<span class="pill acc">Due now</span>' : '<span class="pill">Due Friday</span>';
 }
 function renderCheckin(force) {
-  const p = getPrompt(), key = p ? p.kind + (p.id || '') + p.q : 'none';
+  const p0 = getPrompt();
+  const p = p0 && Object.assign({}, p0, {q: (S.aiq && S.aiq[p0.key]) || p0.q});
+  if (p0 && !(S.aiq && S.aiq[p0.key])) askQuestion(p0);
+  const key = p ? p.kind + (p.id || '') + p.q : 'none';
   if (!force && key === lastKey) return;
   lastKey = key;
   const old = $('ans') ? $('ans').value : '';
@@ -274,6 +301,7 @@ function renderCheckin(force) {
 }
 function render(force) {
   $('date').textContent = new Date().toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'});
+  $('sv').textContent = remote ? 'Saved to file' : 'Saved in this browser';
   const nb = S.tasks.filter(t => !t.done && t.stage === 2).length;
   $('bn').textContent = nb + (nb === 1 ? ' task in Build' : ' tasks in Build');
   renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force);
@@ -310,20 +338,68 @@ $('reflSave').onclick = () => {
   const a = QS.map((_, i) => $('q' + i).value.trim());
   if (!a.some(Boolean)) { $('q0').focus(); return; }
   S.refl.push({ts: Date.now(), a}); if (a[4]) S.focus = a[4];
-  addLog('Weekly reflection saved', 'Reflection'); save(); initForm(); render(true);
+  addLog('Weekly reflection saved', 'Reflection'); save(); initForm(); render(true); makePlan();
   $('saved').innerHTML = '<span class="ok">Saved</span>'; setTimeout(() => { $('saved').innerHTML = ''; }, 3000);
 };
 function initForm() {
   $('qs').innerHTML = QS.map((q, i) => '<label class="qq" for="q' + i + '">' + esc(q) + '</label><textarea id="q' + i + '"></textarea>').join('');
 }
-const KEYK = 'atlas:key';
-const getKey = () => { try { return localStorage.getItem(KEYK) || ''; } catch (e) { return ''; } };
+const getKey = () => S.apiKey || '';
+const BASE = 'You are Atlas, a chief of staff for a developer building VR training experiences in Unity. Every task moves through Brief, Design, Build, Test, Review and Push. Keep the user on track and help when they get pulled between tasks. Be firm but friendly, concise and practical. Ask a short question when you need to know where they are.';
+const sysPrompt = () => BASE + (S.share ? ctx() : '');
+async function callApi(system, messages, max) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'content-type': 'application/json', 'x-api-key': getKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
+    body: JSON.stringify({model: S.model, max_tokens: max, system, messages})
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error((j.error && j.error.message) || ('Request failed with status ' + r.status));
+  return (j.content || []).map(c => c.text || '').join('').trim();
+}
+const asking = {};
+async function askQuestion(p) {
+  if (!getKey() || asking[p.key]) return;
+  asking[p.key] = 1;
+  try {
+    const t = await callApi(sysPrompt(), [{role: 'user', content: 'Write one short check-in question for me (one or two sentences, no preamble). Situation: ' + p.tag + '. Base question: "' + p.q + '". Refer to my actual tasks or log where it helps.'}], 150);
+    if (t) {
+      S.aiq = S.aiq || {}; S.aiq[p.key] = t;
+      const ks = Object.keys(S.aiq); if (ks.length > 20) delete S.aiq[ks[0]];
+      save(); renderCheckin(false);
+    }
+  } catch (e) {}
+}
+async function makePlan() {
+  const r = S.refl[S.refl.length - 1];
+  if (!r || !getKey()) return;
+  $('saved').innerHTML = '<span class="ok">Saved. Atlas is writing your plan...</span>';
+  try {
+    r.plan = await callApi(sysPrompt(), [{role: 'user', content: 'Here are my weekly reflection answers.\n\n' + QS.map((q, i) => q + '\n' + (r.a[i] || '(no answer)')).join('\n\n') +
+      '\n\nGive me a short plan for next week: 3 to 5 next tasks in order, and one thing to watch for.'}], 500);
+    save(); renderWeek();
+  } catch (e) { $('saved').innerHTML = '<span class="hint">Plan failed: ' + esc(e.message) + '</span>'; return; }
+  $('saved').innerHTML = '';
+}
+$('aiDig').onclick = async () => {
+  if (!getKey()) { $('digSt').textContent = 'Add your API key on the Chat page first.'; return; }
+  const ws = weekStart(), done = S.tasks.filter(t => t.done && t.doneAt >= ws), lg = S.log.filter(e => e.ts >= ws).slice(-60);
+  $('digSt').textContent = 'Atlas is reading your week...'; $('aiDig').disabled = true;
+  try {
+    const text = await callApi(sysPrompt(), [{role: 'user', content: 'Summarise my week. Completed tasks:\n' + (done.map(t => '- ' + t.t).join('\n') || 'none') +
+      '\n\nLog entries:\n' + (lg.map(e => hm(e.ts) + ' ' + e.text).join('\n') || 'none') +
+      '\n\nGive a short digest: topics covered, what got done, and where I seem to be in the pipeline. Use plain short paragraphs or a few lines.'}], 500);
+    S.digestAI = {ws, text}; save(); renderWeek(); $('digSt').textContent = '';
+  } catch (e) { $('digSt').textContent = 'Could not reach the API: ' + e.message; }
+  $('aiDig').disabled = false;
+};
 function ctx() {
   const o = S.tasks.filter(t => !t.done);
   const fmt = t => '- ' + t.t + ' [' + (t.label || 'no label') + ', ' + STAGES[t.stage] + (t.today ? ', today' : '') + ']';
   const dk = dayKey(new Date()), lg = S.log.filter(e => dayKey(new Date(e.ts)) === dk).slice(-15);
   return '\n\nCurrent state of the user\'s work:\nWeekly focus: ' + (S.focus || 'not set') + '\nOpen tasks (' + o.length + '):\n' + (o.map(fmt).join('\n') || 'none') +
-    '\nToday\'s log:\n' + (lg.map(e => hm(e.ts) + ' ' + e.text).join('\n') || 'nothing yet');
+    '\nToday\'s log:\n' + (lg.map(e => hm(e.ts) + ' ' + e.text).join('\n') || 'nothing yet') +
+    (S.refl.length ? '\nLatest weekly reflection:\n' + QS.map((q, i) => q + ' ' + (S.refl[S.refl.length - 1].a[i] || '-')).join('\n') : '');
 }
 function renderChat() {
   $('chat').innerHTML = S.chat.length ? S.chat.map(m => '<div class="msg ' + (m.err ? 'err' : m.role) + '">' + esc(m.content) + '</div>').join('')
@@ -336,20 +412,12 @@ async function send() {
   if (busy) return;
   if (!key) { $('chatSt').textContent = 'Add your API key first.'; $('apiKey').focus(); return; }
   if (!v) { $('chatIn').focus(); return; }
-  try { localStorage.setItem(KEYK, key); } catch (e) {}
+  S.apiKey = key;
   S.model = $('model').value.trim() || DEF.model; S.share = $('share').checked;
   S.chat = S.chat.filter(m => !m.err); S.chat.push({role: 'user', content: v}); $('chatIn').value = '';
   busy = true; $('send').disabled = true; $('chatSt').textContent = 'Atlas is thinking...'; save(); renderChat();
-  const system = 'You are Atlas, a chief of staff for a developer building VR training experiences in Unity. Every task moves through Brief, Design, Build, Test, Review and Push. Keep the user on track and help when they get pulled between tasks. Be firm but friendly, concise and practical. Ask a short question when you need to know where they are.' + (S.share ? ctx() : '');
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
-      body: JSON.stringify({model: S.model, max_tokens: 1024, system, messages: S.chat.slice(-30).map(m => ({role: m.role, content: m.content}))})
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error((j.error && j.error.message) || ('Request failed with status ' + r.status));
-    S.chat.push({role: 'assistant', content: (j.content || []).map(c => c.text || '').join('')});
+    S.chat.push({role: 'assistant', content: await callApi(sysPrompt(), S.chat.slice(-30).map(m => ({role: m.role, content: m.content})), 1024)});
     $('chatSt').textContent = '';
   } catch (e) {
     S.chat.push({role: 'assistant', err: true, content: 'Could not reach the API: ' + e.message});
@@ -365,7 +433,9 @@ $('share').onchange = () => { S.share = $('share').checked; save(); };
 renderChat();
 $('st').innerHTML = STAGES.map((s, i) => '<option value="' + i + '">Starts in ' + s + '</option>').join('');
 initForm(); render(true);
+if (remote && !hadRemote) save();
 setInterval(() => render(false), 60000);
+})();
 </script>
 </body>
 </html>
