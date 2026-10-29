@@ -270,6 +270,22 @@ function resolve(p, skipped) {
   else if (p.kind === 'gap' && skipped) S.snooze = Date.now() + 30 * 60000;
 }
 
+function formatTaskBrief(source) {
+  const inline = value => esc(value).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  let html = '', list = false;
+  const close = () => { if (list) { html += '</ul>'; list = false; } };
+  for (const raw of source.split('\n')) {
+    const line = raw.trim().replace(/^\\(?=#)/, '');
+    if (!line) { close(); continue; }
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
+    if (heading) { close(); html += '<h4>' + inline(heading[1]) + '</h4>'; continue; }
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) { if (!list) { html += '<ul>'; list = true; } html += '<li>' + inline(bullet[1]) + '</li>'; continue; }
+    close(); html += '<p>' + inline(line) + '</p>';
+  }
+  close();
+  return html;
+}
 function taskBrief(t) {
   return t.brief ? '<details class="task-brief"><summary>Task breakdown</summary><div class="task-brief-content">' + formatTaskBrief(t.brief) + '</div></details>' : '';
 }
