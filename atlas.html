@@ -337,7 +337,7 @@ function renderAll() {
 function reviewMarkdown(t) {
   const failures = (t.testFailures || []).map((f,i) => '### Failed test ' + (i+1) + '\n' + new Date(f.at).toLocaleString() + '\n\n' + f.note).join('\n\n');
   return '# ' + t.t + '\n\n## Project\n' + (t.label || 'Unlabelled') +
-    '\n\n## Review\n' + (t.reviewNotes || 'No review notes') +
+    '\n\n## Original task brief\n' + (t.brief || 'No brief attached') + '\n\n## Review\n' + (t.reviewNotes || 'No review notes') +
     '\n\n## Testing history\n' + (failures || 'No failed tests recorded') +
     '\n\n## Passed tests\n' + ((t.testPasses || []).map((p,i) =>
       '### Passed test ' + (i+1) + '\n' + new Date(p.at).toLocaleString() + '\n\n' + p.note).join('\n\n') || 'No passed-test notes recorded') + '\n';
