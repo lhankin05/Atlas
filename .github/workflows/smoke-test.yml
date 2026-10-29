@@ -25,13 +25,13 @@ jobs:
           from pathlib import Path
           import re
           html = Path("atlas.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, re.S | re.I)
+          scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S | re.I)
           assert scripts, "No inline JavaScript found"
-          Path("/tmp/atlas-inline.js").write_text("\\n".join(scripts), encoding="utf-8")
+          Path("/tmp/atlas-inline.js").write_text("\n".join(scripts), encoding="utf-8")
           PY
           node --check /tmp/atlas-inline.js
       - name: Check key is not embedded in the webpage
         run: |
-          ! grep -E 'api\\.anthropic\\.com|anthropic-version|id="apiKey"|S\\.apiKey' atlas.html
+          ! grep -E 'api\.anthropic\.com|anthropic-version|id="apiKey"|S\.apiKey' atlas.html
           grep -q "OPENAI_API_KEY" server.py
-          grep -q "^\\.env$" .gitignore
+          grep -q "^\.env$" .gitignore
