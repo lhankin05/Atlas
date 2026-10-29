@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas</title>
+<style>
+:root{--bg:#1d1c1a;--card:#292826;--inset:#33312e;--line:#3f3c38;--text:#ece8e0;--mut:#a39d92;--acc:#cf8a63;--accbg:#3b2d25;--ok:#86b88c;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+.app{max-width:1240px;margin:0 auto;padding:16px;display:grid;grid-template-columns:210px minmax(0,1fr);gap:16px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px}
+.bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:14px 22px;flex-wrap:wrap}
+.logo{width:42px;height:42px;border-radius:50%;border:2px solid var(--acc);display:grid;place-items:center;color:var(--acc);font:600 18px Georgia,serif}
+h1{margin:0;font:600 26px/1 Georgia,"Times New Roman",serif}
+h2{margin:0 0 4px;font:600 19px/1.3 Georgia,"Times New Roman",serif}
+h3{margin:18px 0 6px;font:600 16px Georgia,serif}
+.sp{flex:1}
+.sub,.hint{color:var(--mut)}
+.hint{font-size:13px;margin:0 0 14px}
+.side{display:grid;gap:6px;padding:12px}
+.nav{text-align:left;border:none;background:none;border-radius:14px;padding:10px 14px;color:var(--mut)}
+.nav:hover{background:var(--inset);color:var(--text)}
+.nav.on{background:var(--accbg);color:var(--acc);font-weight:600}
+.page{display:grid;gap:16px}
+.page[hidden]{display:none}
+.r1{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12.5px;background:var(--inset);color:var(--mut);border:1px solid var(--line)}
+.pill.acc{background:var(--accbg);color:var(--acc);border-color:#5a4132}
+input,textarea,select{width:100%;background:var(--inset);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:10px 14px;font:inherit}
+textarea{resize:vertical;min-height:70px}
+input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button{font:inherit;cursor:pointer;border-radius:12px;border:1px solid var(--line);background:var(--inset);color:var(--text);padding:8px 14px}
+button:hover{border-color:var(--mut)}
+button.main{background:var(--acc);border-color:var(--acc);color:#1d1c1a;font-weight:600}
+button.ghost{background:none;color:var(--mut)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row.end{justify-content:flex-end;margin-top:10px}
+.add{display:grid;gap:8px;margin-bottom:16px}
+.add .row>*{flex:1;min-width:150px}
+.task{background:var(--inset);border-radius:16px;padding:12px 14px;margin-top:8px}
+.tt{display:flex;align-items:center;gap:10px}
+.tt .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.tt input{width:18px;height:18px;accent-color:var(--acc);flex:none;padding:0}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px}
+.seg{border-radius:999px;padding:2px 11px;font-size:12.5px;background:var(--card);color:var(--mut)}
+.seg.past{color:var(--ok)}
+.seg.on{background:var(--accbg);border-color:var(--acc);color:var(--acc);font-weight:600}
+.acts{display:flex;gap:6px}
+.mini{padding:3px 10px;font-size:12.5px;background:none;color:var(--mut)}
+.grp{margin-top:8px}
+.gh{width:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;border-radius:16px;padding:12px 14px}
+.gh::before{content:"+";color:var(--acc);font-weight:700;width:12px}
+.gh.open::before{content:"-"}
+.nm{font-weight:600}
+.cnt{color:var(--mut);font-size:13px;margin-right:auto}
+.gb{padding:0 0 4px 14px}
+.log{display:grid;gap:8px;max-height:420px;overflow:auto}
+.entry{background:var(--inset);border-radius:14px;padding:10px 14px}
+.entry .m{color:var(--mut);font-size:12.5px}
+.q{font:500 17px/1.45 Georgia,serif;margin:8px 0 12px}
+.focus{background:var(--accbg);border-radius:14px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.empty{color:var(--mut);font-size:14px;padding:6px 0}
+.digest{background:var(--inset);border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:14px}
+.digest ul{margin:6px 0 0;padding-left:18px}
+label.qq{display:block;margin:14px 0 6px;font-weight:500}
+.ok{color:var(--ok);font-size:13px}
+@media(max-width:860px){.app{grid-template-columns:1fr}.side{display:flex;overflow:auto}.r1{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="card bar">
+    <div class="logo" aria-hidden="true">A</div>
+    <h1>Atlas</h1>
+    <span class="sp"></span>
+    <span class="sub" id="date"></span>
+    <span class="pill acc" id="bn"></span>
+  </header>
+
+  <nav class="card side" aria-label="Pages">
+    <button class="nav on" data-page="home">Home</button>
+    <button class="nav" data-page="tasks">All tasks</button>
+    <button class="nav" data-page="week">Weekly reflection</button>
+  </nav>
+
+  <main>
+    <div class="page" id="p-home">
+      <div class="r1">
+        <section class="card" aria-labelledby="h-today">
+          <h2 id="h-today">Today's tasks</h2>
+          <p class="hint">Click a stage to move a task along the pipeline.</p>
+          <div id="today"></div>
+        </section>
+        <section class="card" aria-labelledby="h-check">
+          <h2 id="h-check">Check-in</h2>
+          <p class="hint">Quick updates on what you are doing.</p>
+          <div id="focus"></div>
+          <div id="checkin"></div>
+        </section>
+      </div>
+
+      <section class="card" aria-labelledby="h-up">
+        <h2 id="h-up">Coming up</h2>
+        <p class="hint">Tasks grouped by label. Select a label to see its tasks.</p>
+        <div id="upcoming"></div>
+      </section>
+
+      <section class="card" aria-labelledby="h-log">
+        <h2 id="h-log">Log</h2>
+        <p class="hint">Today's running notes.</p>
+        <div class="log" id="log"></div>
+      </section>
+    </div>
+
+    <div class="page" id="p-tasks" hidden>
+      <section class="card">
+        <h2>All tasks</h2>
+        <p class="hint">Add tasks here, then see every open task grouped by pipeline stage.</p>
+        <div class="add">
+          <div class="row">
+            <input id="lab" list="labs" placeholder="Label, for example a training module" aria-label="Label">
+            <datalist id="labs"></datalist>
+            <select id="st" aria-label="Starting stage"></select>
+          </div>
+          <textarea id="newT" placeholder="Add tasks, one per line" aria-label="New tasks"></textarea>
+          <div class="row end" style="margin-top:0"><button class="main" id="addT">Add tasks</button></div>
+        </div>
+        <div id="byStage"></div>
+      </section>
+    </div>
+
+    <div class="page" id="p-week" hidden>
+      <section class="card">
+        <div class="row"><h2>Weekly reflection</h2><span class="sp"></span><span id="due"></span></div>
+        <p class="hint">Review the week, then answer. Your last answer sets next week's focus.</p>
+        <div class="digest" id="digest"></div>
+        <div id="qs"></div>
+        <div class="row end"><span id="saved"></span><button class="main" id="reflSave">Save reflection</button></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+const K = 'atlas:v2';
+const STAGES = ['Brief', 'Design', 'Build', 'Test', 'Review', 'Push'];
+const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0};
+const SLOTS = [
+  {id: 'am', h: 9, m: 0, q: 'Morning check-in. What are you tackling today, and which stage is it in?'},
+  {id: 'mid', h: 12, m: 30, q: 'Midday check-in. What got done this morning, and are you still on plan?'},
+  {id: 'pm', h: 17, m: 0, q: 'End of day. What did you finish, and what is the first thing for tomorrow?'}
+];
+const QS = ['What did I complete this week?', 'Where am I in the project right now?', 'What is blocking or slowing me down?',
+  'What pulled me off track, and how did I handle it?', 'What are my top priorities for next week?'];
+
+let S;
+try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); }
+const save = () => { try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const two = n => String(n).padStart(2, '0');
+const dayKey = d => d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+const hm = ts => { const d = new Date(ts); return two(d.getHours()) + ':' + two(d.getMinutes()); };
+const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const addLog = (text, tag) => S.log.push({ts: Date.now(), text, tag: tag || ''});
+const open = {};
+let lastKey = null;
+
+function getPrompt() {
+  if (S.pending) return S.pending;
+  const n = new Date(), mins = n.getHours() * 60 + n.getMinutes(), dk = dayKey(n);
+  for (const s of [...SLOTS].reverse()) {
+    if (mins >= s.h * 60 + s.m && !S.slots[dk + s.id]) return {kind: 'slot', id: dk + s.id, q: s.q, tag: 'Scheduled'};
+  }
+  const last = S.log.length ? S.log[S.log.length - 1].ts : 0, gap = Math.round((Date.now() - last) / 60000);
+  if (last && mins >= 540 && mins < 1080 && gap >= 90 && Date.now() > S.snooze)
+    return {kind: 'gap', q: 'It has been ' + gap + ' minutes since your last update. What are you on now, and has anything pulled you off track?', tag: 'Long gap'};
+  return null;
+}
+function resolve(p, skipped) {
+  if (p.kind === 'slot') S.slots[p.id] = 1;
+  else if (p.kind === 'stage') S.pending = null;
+  else if (p.kind === 'gap' && skipped) S.snooze = Date.now() + 30 * 60000;
+}
+
+function row(t) {
+  const seg = STAGES.map((s, i) => '<button class="seg' + (i === t.stage ? ' on' : i < t.stage ? ' past' : '') + '" data-set="' + t.id + ':' + i + '">' + s + '</button>').join('');
+  return '<div class="task"><div class="tt"><input type="checkbox" data-done="' + t.id + '" aria-label="Mark done"><span class="t">' + esc(t.t) +
+    '</span><span class="pill">' + esc(t.label || 'No label') + '</span></div><div class="steps">' + seg +
+    '</div><div class="acts"><button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
+    '</button><button class="mini" data-del="' + t.id + '">Delete</button></div></div>';
+}
+function renderToday() {
+  const a = S.tasks.filter(t => t.today && !t.done);
+  $('today').innerHTML = a.length ? a.map(row).join('') : '<div class="empty">Nothing planned for today. Choose Do today on a task below.</div>';
+}
+function renderUp() {
+  const a = S.tasks.filter(t => !t.today && !t.done), g = {};
+  a.forEach(t => { const n = t.label || 'No label'; (g[n] = g[n] || []).push(t); });
+  const keys = Object.keys(g);
+  $('upcoming').innerHTML = keys.length ? keys.map(n => {
+    const ts = g[n], c = STAGES.map((s, i) => [s, ts.filter(t => t.stage === i).length]).filter(x => x[1]);
+    return '<div class="grp"><button class="gh' + (open[n] ? ' open' : '') + '" data-grp="' + esc(n) + '"><span class="nm">' + esc(n) +
+      '</span><span class="cnt">' + ts.length + (ts.length === 1 ? ' task' : ' tasks') + '</span>' +
+      c.map(x => '<span class="pill">' + x[0] + ' ' + x[1] + '</span>').join('') + '</button>' +
+      (open[n] ? '<div class="gb">' + ts.map(row).join('') + '</div>' : '') + '</div>';
+  }).join('') : '<div class="empty">Nothing coming up. Add tasks on the All tasks page.</div>';
+  $('labs').innerHTML = [...new Set(S.tasks.map(t => t.label).filter(Boolean))].map(l => '<option value="' + esc(l) + '">').join('');
+}
+function renderAll() {
+  $('byStage').innerHTML = STAGES.map((s, i) => {
+    const a = S.tasks.filter(t => !t.done && t.stage === i);
+    return '<h3>' + s + ' <span class="pill">' + a.length + '</span></h3>' + (a.length ? a.map(row).join('') : '<div class="empty">No tasks in ' + s + '.</div>');
+  }).join('');
+}
+function renderLog() {
+  const dk = dayKey(new Date()), items = S.log.filter(e => dayKey(new Date(e.ts)) === dk).reverse();
+  $('log').innerHTML = items.length ? items.map(e => '<div class="entry"><div class="m">' + hm(e.ts) + (e.tag ? ' - ' + esc(e.tag) : '') + '</div>' + esc(e.text) + '</div>').join('')
+    : '<div class="empty">Nothing logged today. Post an update in Check-in.</div>';
+}
+function renderWeek() {
+  const ws = weekStart(), done = S.tasks.filter(t => t.done && t.doneAt >= ws);
+  const entries = S.log.filter(e => e.ts >= ws).length, moves = S.log.filter(e => e.ts >= ws && e.tag === 'Stage change').length;
+  $('digest').innerHTML = '<b>This week so far</b><ul><li>' + done.length + (done.length === 1 ? ' task' : ' tasks') + ' completed</li>' +
+    done.map(t => '<li>' + esc(t.t) + '</li>').join('') + '<li>' + entries + ' log entries</li><li>' + moves + (moves === 1 ? ' stage change' : ' stage changes') + '</li></ul>';
+  const n = new Date(), late = n.getDay() === 0 || n.getDay() === 6 || (n.getDay() === 5 && n.getHours() >= 16);
+  $('due').innerHTML = S.refl.some(r => r.ts >= ws) ? '<span class="pill">Done for this week</span>' : late ? '<span class="pill acc">Due now</span>' : '<span class="pill">Due Friday</span>';
+}
+function renderCheckin(force) {
+  const p = getPrompt(), key = p ? p.kind + (p.id || '') + p.q : 'none';
+  if (!force && key === lastKey) return;
+  lastKey = key;
+  const old = $('ans') ? $('ans').value : '';
+  $('focus').innerHTML = S.focus ? '<div class="focus"><b>Focus for this week:</b> ' + esc(S.focus) + '</div>' : '';
+  $('checkin').innerHTML = (p ? '<span class="pill acc">' + esc(p.tag) + '</span><div class="q">' + esc(p.q) + '</div>' : '') +
+    '<textarea id="ans" aria-label="Update" placeholder="What are you doing right now?"></textarea><div class="row end">' +
+    (p ? '<button class="ghost" id="skip">Skip</button>' : '') + '<button class="main" id="answer">Log update</button></div>';
+  $('ans').value = old;
+  $('answer').onclick = () => {
+    const v = $('ans').value.trim(); if (!v) { $('ans').focus(); return; }
+    addLog(v, p ? p.tag : 'Update'); if (p) resolve(p); $('ans').value = ''; save(); render(true);
+  };
+  if (p) $('skip').onclick = () => { resolve(p, true); save(); render(true); };
+}
+function render(force) {
+  $('date').textContent = new Date().toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'});
+  const nb = S.tasks.filter(t => !t.done && t.stage === 2).length;
+  $('bn').textContent = nb + (nb === 1 ? ' task in Build' : ' tasks in Build');
+  renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force);
+}
+function show(page) {
+  ['home', 'tasks', 'week'].forEach(p => { $('p-' + p).hidden = p !== page; });
+  document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.page === page));
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button,input[type=checkbox]'); if (!b) return;
+  const d = b.dataset, find = id => S.tasks.find(x => x.id == id);
+  if (d.page) { show(d.page); return; }
+  if (d.grp !== undefined) { open[d.grp] = !open[d.grp]; renderUp(); return; }
+  if (d.set) {
+    const [id, i] = d.set.split(':'), t = find(id);
+    if (t.stage === +i) return;
+    t.stage = +i; addLog(t.t + ' moved to ' + STAGES[+i], 'Stage change');
+    S.pending = {kind: 'stage', q: '"' + t.t + '" is now in ' + STAGES[+i] + '. What is the next step?', tag: 'Stage change'};
+  } else if (d.done) { const t = find(d.done); t.done = true; t.doneAt = Date.now(); addLog('Completed: ' + t.t, 'Task done'); }
+  else if (d.day) { const t = find(d.day); t.today = !t.today; }
+  else if (d.del) S.tasks = S.tasks.filter(x => x.id != d.del);
+  else return;
+  save(); render(true);
+});
+$('addT').onclick = () => {
+  const lines = $('newT').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { $('newT').focus(); return; }
+  const lab = $('lab').value.trim(), st = +$('st').value;
+  lines.forEach((t, i) => S.tasks.push({id: Date.now() + i, t, label: lab, stage: st, today: false, done: false}));
+  $('newT').value = ''; open[lab || 'No label'] = true; save(); render(true);
+};
+$('reflSave').onclick = () => {
+  const a = QS.map((_, i) => $('q' + i).value.trim());
+  if (!a.some(Boolean)) { $('q0').focus(); return; }
+  S.refl.push({ts: Date.now(), a}); if (a[4]) S.focus = a[4];
+  addLog('Weekly reflection saved', 'Reflection'); save(); initForm(); render(true);
+  $('saved').innerHTML = '<span class="ok">Saved</span>'; setTimeout(() => { $('saved').innerHTML = ''; }, 3000);
+};
+function initForm() {
+  $('qs').innerHTML = QS.map((q, i) => '<label class="qq" for="q' + i + '">' + esc(q) + '</label><textarea id="q' + i + '"></textarea>').join('');
+}
+$('st').innerHTML = STAGES.map((s, i) => '<option value="' + i + '">Starts in ' + s + '</option>').join('');
+initForm(); render(true);
+setInterval(() => render(false), 60000);
+</script>
+</body>
+</html>
