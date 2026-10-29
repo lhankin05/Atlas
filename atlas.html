@@ -617,7 +617,7 @@ function renderMdPreview(message) {
   if (!mdProposals.length) { root.innerHTML = '<p class="hint">No Markdown list items found. Use lines such as - [ ] [TASK-001] Model steering wheel under a ## Build heading.</p>'; return; }
   const fresh = mdProposals.filter(p => !p.existingId).length;
   root.innerHTML = '<p class="hint">' + mdProposals.length + ' tasks found; ' + fresh + ' new. Existing tasks are skipped to avoid duplicates.</p>' +
-    mdProposals.map((p,i) => '<div class="task"><label class="chk"><input type="checkbox" data-md-select="' + i + '" ' + (p.existingId ? 'disabled' : 'checked') + '><b>' + esc(p.title) + '</b></label><div class="hint">' + esc(STAGES[p.stage]) + ' · ' + esc(p.status) + (p.externalId ? ' · ' + esc(p.externalId) : '') + (p.parent ? ' · Parent: ' + esc(p.parent) : '') + '</div></div>').join('') +
+    mdProposals.map((p,i) => '<div class="task"><label class="chk"><input type="checkbox" data-md-select="' + i + '" ' + (p.existingId ? 'disabled' : 'checked') + '><b>' + esc(p.title) + '</b></label><div class="hint">' + esc(STAGES[p.stage]) + ' · ' + esc(p.status) + (p.externalId ? ' · ' + esc(p.externalId) : '') + (p.parent ? ' · Parent: ' + esc(p.parent) : '') + '</div>' + (p.brief ? '<details><summary>Preview breakdown</summary><pre style="white-space:pre-wrap">' + esc(p.brief) + '</pre></details>' : '') + '</div>').join('') +
     '<div class="row end"><button type="button" id="mdCancel">Cancel</button><button type="button" class="main" id="mdApprove" ' + (fresh ? '' : 'disabled') + '>Approve selected new tasks</button></div>';
 }
 $('mdFile').addEventListener('change', async e => {
