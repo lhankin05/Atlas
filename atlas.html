@@ -280,7 +280,7 @@ function row(t) {
     '</div><div class="acts">' + (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
     '' +
     '<button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
-    '</button><button class="mini" data-del="' + t.id + '">Delete</button></div>' + taskNoteEditor(t) + '</div>';
+    '</button><button class="mini" data-del="' + t.id + '">Delete</button></div>' + taskBrief(t) + taskNoteEditor(t) + '</div>';
 }
 let taskEditor = null;
 function taskNoteEditor(t) {
@@ -299,7 +299,7 @@ function todayRow(t) {
     (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
     '' +
     '<button class="mini" data-day="' + t.id +
-    '">Move to later</button></div>' + taskNoteEditor(t) + '</div>';
+    '">Move to later</button></div>' + taskBrief(t) + taskNoteEditor(t) + '</div>';
 }
 function renderToday() {
   const a = S.tasks.filter(t => t.today && !t.done);
@@ -324,7 +324,7 @@ function renderUp() {
     '<div class="up-item"><span class="t">' + esc(t.t) +
     '</span>' + (t.scheduledFor ? '<span class="hint">Scheduled for ' + esc(t.scheduledFor === tomorrowKey() ? 'tomorrow' : t.scheduledFor) + '</span>' : '') +
     '<button class="mini" data-day="' + t.id + '">Do today</button>' +
-    '<button class="mini" data-tomorrow="' + t.id + '">' + (t.scheduledFor === tomorrowKey() ? 'Undo tomorrow' : 'Do tomorrow') + '</button></div>'
+    '<button class="mini" data-tomorrow="' + t.id + '">' + (t.scheduledFor === tomorrowKey() ? 'Undo tomorrow' : 'Do tomorrow') + '</button></div>' + taskBrief(t)
   ).join('') + '</div>' : '<div class="empty">Nothing coming up. Add tasks on the All tasks page.</div>';
   $('labs').innerHTML = [...new Set(S.tasks.map(t => t.label).filter(Boolean))].map(l => '<option value="' + esc(l) + '">').join('');
 }
