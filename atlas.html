@@ -330,6 +330,8 @@ function renderArchive() {
   $('archive').innerHTML = a.length ? a.map(t =>
     '<details class="task"><summary style="cursor:pointer"><strong>' + esc(t.t) +
     '</strong> <span class="pill">' + esc(t.label || 'No label') +
+    '</span> <span class="hint" style="margin-left:8px">Completed ' +
+    (t.doneAt ? esc(new Date(t.doneAt).toLocaleString(undefined, {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})) : 'date unknown') +
     '</span></summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto;padding:12px;background:var(--inset);border-radius:10px">' +
     esc(reviewMarkdown(t)) + '</pre><div class="acts"><button class="mini" data-export="' + t.id +
     '">Download Markdown</button></div></details>').join('') : '<div class="empty">No archived tasks yet.</div>';
