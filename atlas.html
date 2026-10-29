@@ -92,6 +92,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
   <nav class="card side" aria-label="Pages">
     <button class="nav on" data-page="home">Home</button>
     <button class="nav" data-page="tasks">All tasks</button>
+    <button class="nav" data-page="daily">End-of-day review</button>
     <button class="nav" data-page="week">Weekly reflection</button>
     <button class="nav" data-page="chat">Chat with Atlas</button>
   </nav>
@@ -159,6 +160,17 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
       </section>
     </div>
 
+    <div class="page" id="p-daily" hidden>
+      <section class="card">
+        <div class="row"><h2>End-of-day review</h2><span class="sp"></span><span class="pill" id="dailyCount"></span></div>
+        <p class="hint">Answer a few short questions. Atlas compares your reflection with the current task plan and suggests changes for your approval.</p>
+        <div id="dailyIntro" class="digest"></div>
+        <div id="dailyFlow"></div>
+        <div class="row end"><button id="dailyStart" class="main">Start / resume reflection</button></div>
+        <div id="dailyReview"></div>
+      </section>
+    </div>
+
     <div class="page" id="p-week" hidden>
       <section class="card">
         <div class="row"><h2>Weekly reflection</h2><span class="sp"></span><span id="due"></span></div>
@@ -178,7 +190,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
 (async function () {
 const K = 'atlas:v2';
 const STAGES = ['Brief', 'Design', 'Build', 'Test', 'Review', 'Push'];
-const DEF = {tasks: [], log: [], refl: [], focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'gpt-4.1-mini'};
+const DEF = {tasks: [], log: [], refl: [], dailyReviews: [], dailyDraft: null, focus: '', slots: {}, pending: null, snooze: 0, chat: [], share: true, model: 'gpt-4.1-mini'};
 const SLOTS = [
   {id: 'am', h: 9, m: 0, q: 'Morning check-in. What are you tackling today, and which stage is it in?'},
   {id: 'mid', h: 12, m: 30, q: 'Midday check-in. What got done this morning, and are you still on plan?'},
@@ -197,6 +209,7 @@ try {
   }
 } catch (e) {}
 if (!S) { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { S = Object.assign({}, DEF); } }
+delete S.apiKey; S.dailyReviews = S.dailyReviews || []; S.dailyDraft = S.dailyDraft || null;
 const flush = () => {
   if (!remote) return; clearTimeout(tmr); tmr = null;
   fetch('/api/data', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(S), keepalive: true}).catch(() => {});
@@ -279,6 +292,61 @@ function renderWeek() {
   const n = new Date(), late = n.getDay() === 0 || n.getDay() === 6 || (n.getDay() === 5 && n.getHours() >= 16);
   $('due').innerHTML = S.refl.some(r => r.ts >= ws) ? '<span class="pill">Done for this week</span>' : late ? '<span class="pill acc">Due now</span>' : '<span class="pill">Due Friday</span>';
 }
+const DAILY_QS = [
+  {q: 'What did you spend most of today working on?', options: ['Building a feature', 'Fixing a bug', 'Planning or designing', 'Testing or reviewing', 'Researching / learning', 'Other']},
+  {q: 'How did the day go overall?', options: ['Made good progress', 'Some progress, slower than expected', 'Mostly blocked', 'Changed priorities', 'Did not get much done']},
+  {q: 'Did you hit any blockers or discover new work?', options: ['No blockers or new tasks', 'Found a bug to fix', 'Discovered a missing task', 'Waiting on something', 'Need to investigate further']},
+  {q: 'What is the most important thing you accomplished or learned?', free: true},
+  {q: 'What should be the first priority next time?', options: ['Continue the current task', 'Resolve a blocker', 'Start a newly discovered task', 'Review and test recent work', 'Decide tomorrow']}
+];
+function dailyToday() { return dayKey(new Date()); }
+function dailyEnsure() {
+  if (!S.dailyDraft || S.dailyDraft.date !== dailyToday()) S.dailyDraft = {date: dailyToday(), step: 0, answers: [], review: null};
+  return S.dailyDraft;
+}
+function renderDaily() {
+  const d = dailyEnsure(), finished = S.dailyReviews.find(x => x.date === dailyToday());
+  $('dailyCount').textContent = (d.step >= DAILY_QS.length ? 'Ready to review' : 'Question ' + Math.min(d.step + 1, DAILY_QS.length) + ' of ' + DAILY_QS.length);
+  $('dailyIntro').textContent = finished ? 'A review has already been saved today. You can start another reflection if you need to.' : 'Your notes today: ' + S.log.filter(e => dayKey(new Date(e.ts)) === dailyToday()).length + ' log entries · ' + S.tasks.filter(t => !t.done).length + ' open tasks.';
+  if (d.review) { renderDailyReview(d.review); return; }
+  if (d.step >= DAILY_QS.length) { $('dailyFlow').innerHTML = '<p class="q">Reflection complete. Ask Atlas to compare your answers with the current plan.</p><button class="main" id="dailyAnalyse">Analyse reflection</button>'; $('dailyReview').innerHTML = ''; return; }
+  const q = DAILY_QS[d.step], chosen = d.answers[d.step] || '';
+  $('dailyFlow').innerHTML = '<div class="q">' + esc(q.q) + '</div>' + (q.options ? '<div class="row" id="dailyOptions">' + q.options.map(o => '<button type="button" data-daily-option="' + esc(o) + '" class="' + (chosen === o ? 'main' : '') + '">' + esc(o) + '</button>').join('') + '</div>' : '') +
+    '<label class="qq" for="dailyAnswer">' + (q.options ? 'Optional detail' : 'Your answer') + '</label><textarea id="dailyAnswer" placeholder="' + (q.options ? 'Add a detail if useful...' : 'A sentence or two is enough...') + '">' + (q.options && chosen === q.options.find(o => o === chosen) ? '' : esc(chosen)) + '</textarea>' +
+    '<div class="row end"><button id="dailyBack" ' + (d.step === 0 ? 'disabled' : '') + '>Back</button><button class="main" id="dailyNext">' + (d.step === DAILY_QS.length - 1 ? 'Finish answers' : 'Next question') + '</button></div>';
+  $('dailyReview').innerHTML = '';
+}
+function renderDailyReview(review) {
+  const proposals = Array.isArray(review.tasks) ? review.tasks : [];
+  $('dailyFlow').innerHTML = '<h3>Daily summary</h3><div class="digest" style="white-space:pre-wrap">' + esc(review.summary || 'No summary returned.') + '</div>' +
+    '<h3>Blockers and tomorrow</h3><div class="digest" style="white-space:pre-wrap">' + esc((review.blockers || []).map(x => '• ' + x).join('\n') + '\n\nFirst priority: ' + (review.tomorrow || 'Not specified')) + '</div>' +
+    '<h3>Suggested new tasks</h3><p class="hint">Tick only the tasks you want to add. Nothing changes until you approve.</p>' +
+    (proposals.length ? proposals.map((t,i) => '<div class="task"><label class="chk"><input type="checkbox" data-daily-approve="' + i + '" checked><b>' + esc(t.title || 'Untitled task') + '</b></label><div class="hint">' + esc(t.label || 'General') + ' · ' + esc(t.stage || 'Brief') + ' · ' + esc(t.priority || 'Recommended') + '</div><div>' + esc(t.reason || 'Suggested from today\'s reflection.') + '</div></div>').join('') : '<div class="empty">Atlas did not identify any new tasks.</div>') +
+    '<div class="row end"><button id="dailyEdit">Back to answers</button><button class="main" id="dailyApprove">Approve selected tasks and save review</button></div>';
+  $('dailyReview').innerHTML = review.updates && review.updates.length ? '<h3>Other suggested changes</h3><div class="digest">' + esc(review.updates.map(x => (x.task || 'Task') + ': ' + (x.change || '') + ' — ' + (x.reason || '')).join('\n')) + '</div>' : '';
+}
+$('dailyStart').onclick = () => { const d = dailyEnsure(); if (d.review) d.review = null; if (d.step >= DAILY_QS.length) d.step = 0; save(); renderDaily(); };
+$('dailyFlow').addEventListener('click', async e => {
+  const opt = e.target.closest('[data-daily-option]');
+  if (opt) { const d = dailyEnsure(), q = DAILY_QS[d.step]; d.answers[d.step] = opt.dataset.dailyOption; save(); renderDaily(); return; }
+  if (e.target.id === 'dailyBack') { const d = dailyEnsure(); d.answers[d.step] = $('dailyAnswer').value.trim() || d.answers[d.step] || ''; d.step = Math.max(0, d.step - 1); save(); renderDaily(); }
+  if (e.target.id === 'dailyNext') { const d = dailyEnsure(), q = DAILY_QS[d.step], free = $('dailyAnswer').value.trim(); d.answers[d.step] = free || d.answers[d.step] || ''; if (!d.answers[d.step]) { $('dailyAnswer').focus(); return; } d.step++; save(); renderDaily(); }
+  if (e.target.id === 'dailyAnalyse') {
+    const d = dailyEnsure(); $('dailyFlow').innerHTML = '<p class="hint">Atlas is comparing your reflection with your task plan...</p>';
+    const todayLog = S.log.filter(x => dayKey(new Date(x.ts)) === dailyToday()).map(x => x.text);
+    const openTasks = S.tasks.filter(t => !t.done).map(t => ({title:t.t,label:t.label,stage:STAGES[t.stage],today:t.today}));
+    const prompt = 'Review this end-of-day reflection against the existing project plan. Return ONLY valid JSON with keys summary (string), blockers (array of strings), tomorrow (string), tasks (array of objects with title, label, stage chosen from Brief/Design/Build/Test/Review/Push, priority chosen from Required/Recommended/Investigate, reason), updates (array of objects with task, change, reason). Do not duplicate existing tasks. Only suggest genuinely missing work. Keep proposals concise. Answers: ' + JSON.stringify(d.answers.map((a,i)=>({question:DAILY_QS[i].q,answer:a}))) + ' Today log: ' + JSON.stringify(todayLog) + ' Existing open tasks: ' + JSON.stringify(openTasks);
+    try { let raw = await callApi(BASE, [{role:'user',content:prompt}], 1400); raw = raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''); const review = JSON.parse(raw); d.review = review; save(); renderDaily(); }
+    catch(err) { $('dailyFlow').innerHTML = '<div class="msg err">Could not analyse the reflection: ' + esc(err.message) + '</div><button id="dailyAnalyse" class="main">Try again</button>'; }
+  }
+  if (e.target.id === 'dailyEdit') { const d = dailyEnsure(); d.review = null; d.step = DAILY_QS.length; save(); renderDaily(); }
+  if (e.target.id === 'dailyApprove') {
+    const d = dailyEnsure(), review = d.review || {}, selected = [...$('dailyFlow').querySelectorAll('[data-daily-approve]:checked')].map(el => Number(el.dataset.dailyApprove));
+    selected.forEach(i => { const t = (review.tasks || [])[i]; if (!t || !t.title) return; S.tasks.push({id:Date.now()+i+Math.floor(Math.random()*1000),t:t.title,label:t.label || 'From daily review',stage:Math.max(0,STAGES.indexOf(t.stage)),today:false,done:false}); addLog('New task approved: ' + t.title,'Daily review'); });
+    S.dailyReviews.push({date:dailyToday(),ts:Date.now(),answers:d.answers,review,approved:selected.map(i=>(review.tasks||[])[i]).filter(Boolean).map(t=>t.title)});
+    addLog('End-of-day reflection saved','Daily review'); S.dailyDraft = {date:dailyToday(),step:DAILY_QS.length,answers:[],review:null}; save(); render(true); renderDaily(); $('dailyFlow').innerHTML = '<div class="digest">Review saved. ' + selected.length + ' new task(s) approved and added.</div>';
+  }
+});
 function renderCheckin(force) {
   const p0 = getPrompt();
   const p = p0 && Object.assign({}, p0, {q: (S.aiq && S.aiq[p0.key]) || p0.q});
@@ -303,10 +371,10 @@ function render(force) {
   $('sv').textContent = remote ? 'Saved to file' : 'Saved in this browser';
   const nb = S.tasks.filter(t => !t.done && t.stage === 2).length;
   $('bn').textContent = nb + (nb === 1 ? ' task in Build' : ' tasks in Build');
-  renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force);
+  renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force); renderDaily();
 }
 function show(page) {
-  ['home', 'tasks', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
+  ['home', 'tasks', 'daily', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
   document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.page === page));
 }
 
@@ -406,7 +474,7 @@ function renderChat() {
 }
 let busy = false;
 async function send() {
-  const v = $('chatIn').value.trim(), key = $('apiKey').value.trim();
+  const v = $('chatIn').value.trim();
   if (busy) return;
   if (!v) { $('chatIn').focus(); return; }
   S.model = DEF.model; S.share = $('share').checked;
