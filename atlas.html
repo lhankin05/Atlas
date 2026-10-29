@@ -302,11 +302,26 @@ function renderToday() {
   const a = S.tasks.filter(t => t.today && !t.done);
   $('today').innerHTML = a.length ? a.map(todayRow).join('') : '<div class="empty">Nothing planned for today. Choose Do today on a task below.</div>';
 }
+function tomorrowKey() {
+  const d = new Date(); d.setDate(d.getDate() + 1); return dayKey(d);
+}
+function activateScheduledTasks() {
+  const today = dayKey(new Date());
+  let changed = false;
+  S.tasks.forEach(t => {
+    if (!t.done && t.scheduledFor && t.scheduledFor <= today) {
+      t.today = true; delete t.scheduledFor; changed = true;
+    }
+  });
+  if (changed) save();
+}
 function renderUp() {
   const a = S.tasks.filter(t => !t.today && !t.done);
   $('upcoming').innerHTML = a.length ? '<div class="up-list">' + a.map(t =>
     '<div class="up-item"><span class="t">' + esc(t.t) +
-    '</span><button class="mini" data-day="' + t.id + '">Do today</button></div>'
+    '</span>' + (t.scheduledFor ? '<span class="hint">Scheduled for ' + esc(t.scheduledFor === tomorrowKey() ? 'tomorrow' : t.scheduledFor) + '</span>' : '') +
+    '<button class="mini" data-day="' + t.id + '">Do today</button>' +
+    '<button class="mini" data-tomorrow="' + t.id + '">' + (t.scheduledFor === tomorrowKey() ? 'Undo tomorrow' : 'Do tomorrow') + '</button></div>'
   ).join('') + '</div>' : '<div class="empty">Nothing coming up. Add tasks on the All tasks page.</div>';
   $('labs').innerHTML = [...new Set(S.tasks.map(t => t.label).filter(Boolean))].map(l => '<option value="' + esc(l) + '">').join('');
 }
@@ -462,6 +477,7 @@ function renderCheckin(force) {
   if (p) $('skip').onclick = () => { resolve(p, true); save(); render(true); };
 }
 function render(force) {
+  activateScheduledTasks();
   $('date').textContent = new Date().toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'});
   $('sv').textContent = remote ? 'Saved to file' : 'Saved in this browser';
   const nb = S.tasks.filter(t => !t.done && t.stage === 1).length;
@@ -528,7 +544,13 @@ document.addEventListener('click', e => {
     t.stage = +i; addLog(t.t + ' moved to ' + STAGES[+i], 'Stage change');
     S.pending = {kind: 'stage', q: '"' + t.t + '" is now in ' + STAGES[+i] + '. What is the next step?', tag: 'Stage change'};
   } else if (d.done) { const t = find(d.done); t.done = true; t.doneAt = Date.now(); addLog('Completed: ' + t.t, 'Task done'); }
-  else if (d.day) { const t = find(d.day); t.today = !t.today; }
+  else if (d.day) { const t = find(d.day); t.today = !t.today; if (t.today) delete t.scheduledFor; }
+  else if (d.tomorrow) {
+    const t = find(d.tomorrow); if (!t || t.done) return;
+    const date = tomorrowKey();
+    if (t.scheduledFor === date) delete t.scheduledFor;
+    else { t.scheduledFor = date; t.today = false; }
+  }
   else if (d.del) S.tasks = S.tasks.filter(x => x.id != d.del);
   else return;
   save(); render(true);
