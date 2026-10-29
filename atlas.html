@@ -270,6 +270,9 @@ function resolve(p, skipped) {
   else if (p.kind === 'gap' && skipped) S.snooze = Date.now() + 30 * 60000;
 }
 
+function taskBrief(t) {
+  return t.brief ? '<details class="task-brief"><summary>Task breakdown</summary><pre style="white-space:pre-wrap">' + esc(t.brief) + '</pre></details>' : '';
+}
 function row(t) {
   const seg = STAGES.map((s, i) => '<button class="seg' + (i === t.stage ? ' on' : i < t.stage ? ' past' : '') + '" data-set="' + t.id + ':' + i + '">' + s + '</button>').join('');
   return '<div class="task"><div class="tt"><input type="checkbox" data-done="' + t.id + '" aria-label="Mark done"><span class="t">' + esc(t.t) +
