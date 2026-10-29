@@ -112,12 +112,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
           <p class="hint">Complete the current stage to move forward. Tasks stay on today’s list.</p>
           <div id="today"></div>
         </section>
-        <section class="card" aria-labelledby="h-check">
-          <h2 id="h-check">Check-in</h2>
-          <p class="hint">Quick updates on what you are doing.</p>
-          <div id="focus"></div>
-          <div id="checkin"></div>
-        </section>
+
       </div>
 
       <section class="card" aria-labelledby="h-up">
@@ -282,7 +277,16 @@ function row(t) {
     '</div><div class="acts">' + (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
     (t.stage === 3 ? '<button class="mini" data-review="' + t.id + '">Write review</button>' : '') +
     '<button class="mini" data-day="' + t.id + '">' + (t.today ? 'Move to later' : 'Do today') +
-    '</button><button class="mini" data-del="' + t.id + '">Delete</button></div></div>';
+    '</button><button class="mini" data-del="' + t.id + '">Delete</button></div>' + taskNoteEditor(t) + '</div>';
+}
+let taskEditor = null;
+function taskNoteEditor(t) {
+  if (!taskEditor || String(taskEditor.id) !== String(t.id)) return '';
+  const mode = taskEditor.mode;
+  const label = mode === 'fail' ? 'What failed during testing?' : mode === 'pass' ? 'What passed during testing?' : 'Describe what you built, how it works, and problems solved.';
+  return '<div style="margin-top:12px;padding:14px;background:var(--inset);border-radius:12px"><label for="taskNote"><strong>' + label + '</strong></label>' +
+    '<textarea id="taskNote" style="margin-top:8px;min-height:110px" placeholder="Write your notes here...">' + esc(mode === 'review' ? (t.reviewNotes || '') : '') + '</textarea>' +
+    '<div class="row end"><button class="mini" data-cancel-note="1">Cancel</button><button class="main" data-save-note="' + t.id + '">Save notes</button></div></div>';
 }
 function todayRow(t) {
   const stage = STAGES[Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0))];
@@ -292,7 +296,7 @@ function todayRow(t) {
     (t.stage === 2 ? '<button class="mini" data-fail="' + t.id + '">Failed test</button>' : '') +
     (t.stage === 3 ? '<button class="mini" data-review="' + t.id + '">Write review</button>' : '') +
     '<button class="mini" data-day="' + t.id +
-    '">Move to later</button></div></div>';
+    '">Move to later</button></div>' + taskNoteEditor(t) + '</div>';
 }
 function renderToday() {
   const a = S.tasks.filter(t => t.today && !t.done);
@@ -316,7 +320,9 @@ function reviewMarkdown(t) {
   const failures = (t.testFailures || []).map((f,i) => '### Failed test ' + (i+1) + '\n' + new Date(f.at).toLocaleString() + '\n\n' + f.note).join('\n\n');
   return '# ' + t.t + '\n\n## Project\n' + (t.label || 'Unlabelled') +
     '\n\n## Review\n' + (t.reviewNotes || 'No review notes') +
-    '\n\n## Testing history\n' + (failures || 'No failed tests recorded') + '\n';
+    '\n\n## Testing history\n' + (failures || 'No failed tests recorded') +
+    '\n\n## Passed tests\n' + ((t.testPasses || []).map((p,i) =>
+      '### Passed test ' + (i+1) + '\n' + new Date(p.at).toLocaleString() + '\n\n' + p.note).join('\n\n') || 'No passed-test notes recorded') + '\n';
 }
 function renderArchive() {
   const a = S.tasks.filter(t => t.done).slice().reverse();
@@ -458,7 +464,7 @@ function render(force) {
   $('sv').textContent = remote ? 'Saved to file' : 'Saved in this browser';
   const nb = S.tasks.filter(t => !t.done && t.stage === 1).length;
   $('bn').textContent = nb + (nb === 1 ? ' task in Build' : ' tasks in Build');
-  renderToday(); renderUp(); renderAll(); renderArchive(); renderLog(); renderWeek(); renderCheckin(force); renderDaily();
+  renderToday(); renderUp(); renderAll(); renderArchive(); renderLog(); renderWeek(); renderDaily();
 }
 function show(page) {
   ['home', 'tasks', 'log', 'archive', 'daily', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
@@ -481,31 +487,38 @@ document.addEventListener('click', e => {
     return;
   }
   if (d.grp !== undefined) { open[d.grp] = !open[d.grp]; renderUp(); return; }
-  if (d.fail) {
-    const t = find(d.fail); if (!t || t.done || t.stage !== 2) return;
-    const note = prompt('What failed during testing?');
-    if (!note || !note.trim()) return;
-    t.testFailures = t.testFailures || [];
-    t.testFailures.push({at: Date.now(), note: note.trim()});
-    t.stage = 1;
-    addLog('Test failed for ' + t.t + ': ' + note.trim(), 'Test failure');
-  } else if (d.review) {
-    const t = find(d.review); if (!t || t.done) return;
-    const note = prompt('Describe what you built, how it works, and problems solved:', t.reviewNotes || '');
-    if (note === null) return;
-    t.reviewNotes = note.trim();
-    addLog('Review saved for ' + t.t, 'Review');
-  } else if (d.advance) {
-    const t = find(d.advance); if (!t || t.done) return;
-    if (t.stage === 3 && !t.reviewNotes) { alert('Write review notes before advancing.'); return; }
-    const i = Math.max(0, Math.min(STAGES.length - 1, Number(t.stage) || 0));
-    if (i === STAGES.length - 1) {
-      t.done = true; t.doneAt = Date.now();
-      addLog('Completed: ' + t.t, 'Task done');
+  if (d.cancelNote) { taskEditor = null; render(true); return; }
+  if (d.saveNote) {
+    const t = find(d.saveNote); if (!t || !taskEditor || String(taskEditor.id) !== String(t.id)) return;
+    const note = $('taskNote').value.trim();
+    if (!note) { $('taskNote').focus(); return; }
+    const mode = taskEditor.mode;
+    if (mode === 'fail') {
+      t.testFailures = t.testFailures || []; t.testFailures.push({at:Date.now(),note});
+      t.stage = 1; addLog('Test failed for ' + t.t + ': ' + note,'Test failure');
+    } else if (mode === 'pass') {
+      t.testPasses = t.testPasses || []; t.testPasses.push({at:Date.now(),note});
+      t.stage = 3; addLog('Test passed for ' + t.t + ': ' + note,'Test passed');
     } else {
-      t.stage = i + 1;
-      addLog(t.t + ' moved to ' + STAGES[t.stage], 'Stage change');
-      S.pending = {kind: 'stage', q: '"' + t.t + '" is now in ' + STAGES[t.stage] + '. What is the next step?', tag: 'Stage change'};
+      t.reviewNotes = note; addLog('Review saved for ' + t.t,'Review');
+    }
+    taskEditor = null; save(); render(true); return;
+  }
+  if (d.fail || d.review || (d.advance && find(d.advance)?.stage === 2)) {
+    const t = find(d.fail || d.review || d.advance); if (!t || t.done) return;
+    taskEditor = {id:t.id,mode:d.fail?'fail':d.review?'review':'pass'};
+    render(true); $('taskNote')?.focus(); return;
+  }
+  if (d.advance) {
+    const t = find(d.advance); if (!t || t.done) return;
+    if (t.stage === 3 && !t.reviewNotes) {
+      taskEditor = {id:t.id,mode:'review'}; render(true); $('taskNote')?.focus(); return;
+    }
+    const i = Math.max(0,Math.min(STAGES.length-1,Number(t.stage)||0));
+    if (i === STAGES.length-1) {
+      t.done = true; t.doneAt = Date.now(); addLog('Completed: '+t.t,'Task done');
+    } else {
+      t.stage = i+1; addLog(t.t+' moved to '+STAGES[t.stage],'Stage change');
     }
   } else if (d.set) {
     const [id, i] = d.set.split(':'), t = find(id);
