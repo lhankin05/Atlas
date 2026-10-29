@@ -568,7 +568,7 @@ document.addEventListener('click', e => {
 let mdProposals = [];
 const normalTitle = v => String(v || '').trim().toLocaleLowerCase();
 function parseAtlasMarkdown(source) {
-  const lines = source.replace(/\r/g, '').split('\n');
+  const lines = source.replace(/\r/g, '').split('\n').map(line => line.replace(/^(\s*)\\(?=#{1,6}\s)/, '$1'));
   const result = [], seen = new Set();
   let stage = 0;
   let activeBrief = null;
