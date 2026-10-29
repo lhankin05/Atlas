@@ -271,7 +271,7 @@ function resolve(p, skipped) {
 }
 
 function taskBrief(t) {
-  return t.brief ? '<details class="task-brief"><summary>Task breakdown</summary><pre style="white-space:pre-wrap">' + esc(t.brief) + '</pre></details>' : '';
+  return t.brief ? '<details class="task-brief"><summary>Task breakdown</summary><div class="task-brief-content">' + formatTaskBrief(t.brief) + '</div></details>' : '';
 }
 function row(t) {
   const seg = STAGES.map((s, i) => '<button class="seg' + (i === t.stage ? ' on' : i < t.stage ? ' past' : '') + '" data-set="' + t.id + ':' + i + '">' + s + '</button>').join('');
