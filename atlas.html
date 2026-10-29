@@ -634,7 +634,7 @@ $('mdPreview').addEventListener('click', e => {
     let added = 0;
     for (const p of chosen) {
       if (S.tasks.some(t => (p.externalId && t.externalId === p.externalId) || normalTitle(t.t) === normalTitle(p.title))) continue;
-      S.tasks.push({id:Date.now() + added + Math.floor(Math.random()*100000),externalId:p.externalId || undefined,t:p.title,label:p.label || 'Markdown import',stage:p.stage,parentExternalId:p.parent || undefined,type:p.type || undefined,today:false,done:!!p.done,doneAt:p.done ? Date.now() : undefined});
+      S.tasks.push({id:Date.now() + added + Math.floor(Math.random()*100000),externalId:p.externalId || undefined,t:p.title,label:p.label || 'Markdown import',stage:p.stage,parentExternalId:p.parent || undefined,type:p.type || undefined,brief:p.brief || '',today:false,done:!!p.done,doneAt:p.done ? Date.now() : undefined});
       added++;
     }
     if (added) addLog('Imported ' + added + ' tasks from Markdown','Import');
