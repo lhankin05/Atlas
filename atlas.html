@@ -25,6 +25,7 @@ h3{margin:18px 0 6px;font:600 16px Georgia,serif}
 .nav.on{background:var(--accbg);color:var(--acc);font-weight:600}
 .page{display:grid;gap:16px}
 .page[hidden]{display:none}
+.home-stack{display:grid;gap:16px}
 .r1{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
 .pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12.5px;background:var(--inset);color:var(--mut);border:1px solid var(--line)}
 .pill.acc{background:var(--accbg);color:var(--acc);border-color:#5a4132}
@@ -96,6 +97,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
   <nav class="card side" aria-label="Pages">
     <button class="nav on" data-page="home">Home</button>
     <button class="nav" data-page="tasks">All tasks</button>
+    <button class="nav" data-page="log">Log</button>
     <button class="nav" data-page="daily">End-of-day review</button>
     <button class="nav" data-page="week">Weekly reflection</button>
     <button class="nav" data-page="chat">Chat with Atlas</button>
@@ -103,7 +105,7 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
 
   <main>
     <div class="page" id="p-home">
-      <div class="r1">
+      <div class="home-stack">
         <section class="card" aria-labelledby="h-today">
           <h2 id="h-today">Today's tasks</h2>
           <p class="hint">Complete the current stage to move forward. Tasks stay on today’s list.</p>
@@ -123,6 +125,10 @@ label.qq{display:block;margin:14px 0 6px;font-weight:500}
         <div id="upcoming"></div>
       </section>
 
+
+    </div>
+
+    <div class="page" id="p-log" hidden>
       <section class="card" aria-labelledby="h-log">
         <h2 id="h-log">Log</h2>
         <p class="hint">Today's running notes.</p>
@@ -387,7 +393,7 @@ function render(force) {
   renderToday(); renderUp(); renderAll(); renderLog(); renderWeek(); renderCheckin(force); renderDaily();
 }
 function show(page) {
-  ['home', 'tasks', 'daily', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
+  ['home', 'tasks', 'log', 'daily', 'week', 'chat'].forEach(p => { $('p-' + p).hidden = p !== page; });
   document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.page === page));
 }
 
