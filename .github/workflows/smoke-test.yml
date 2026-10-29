@@ -1,0 +1,37 @@
+name: Atlas smoke tests
+
+on:
+  push:
+    branches: [feature/openai-local-ai]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Python syntax
+        run: python -m py_compile server.py
+      - name: Check embedded JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("atlas.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, re.S | re.I)
+          assert scripts, "No inline JavaScript found"
+          Path("/tmp/atlas-inline.js").write_text("\\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/atlas-inline.js
+      - name: Check key is not embedded in the webpage
+        run: |
+          ! grep -E 'api\\.anthropic\\.com|anthropic-version|id="apiKey"|S\\.apiKey' atlas.html
+          grep -q "OPENAI_API_KEY" server.py
+          grep -q "^\\.env$" .gitignore
